@@ -1,0 +1,6 @@
+node_modules/
+db/permits.db
+screenshots/
+seen_permits.json
+.env
+*.log

@@ -1,0 +1,691 @@
+{
+  "metadata": {
+    "centerPoint": "29464 - Mount Pleasant, SC",
+    "radiusDescription": "~1.5 hours driving distance",
+    "researchDate": "2026-02-28",
+    "notes": "Counties and municipalities within approximately 1.5 hours driving distance of Mount Pleasant, SC (29464). Portal URLs and software platforms verified via web research."
+  },
+  "counties": [
+    {
+      "name": "Charleston County",
+      "countySlug": "charleston-county",
+      "countySeat": "Charleston",
+      "drivingTimeFromMtPleasant": "0-30 min",
+      "tier": "core",
+      "countyPermitPortal": {
+        "url": "https://egovweb.charlestoncounty.org/EnerGov_Prod/SelfService",
+        "platform": "EnerGov (Tyler Technologies)",
+        "portalType": "energov-css",
+        "notes": "Charleston County Citizen Self Service (CSS) portal. Covers unincorporated Charleston County areas.",
+        "phone": "843-202-6930"
+      },
+      "municipalities": [
+        {
+          "name": "City of Charleston",
+          "slug": "charleston",
+          "population": "~150,000",
+          "portalUrl": "https://egcss.charleston-sc.gov/energov_prod/selfservice",
+          "alternatePortalUrl": "https://cap.charleston-sc.gov/energov_prod/citizenaccess/site/public/main",
+          "platform": "EnerGov (Tyler Technologies)",
+          "portalType": "energov-css",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-724-3765",
+          "infoUrl": "https://www.charleston-sc.gov/856/Permit-Center",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "Town of Mount Pleasant",
+          "slug": "mount-pleasant",
+          "population": "~95,000",
+          "portalUrl": "https://eody.fa.us6.oraclecloud.com/fscmUI/publicSector.html",
+          "platform": "Oracle Cloud (OPAL system)",
+          "portalType": "oracle-opal",
+          "previousPlatforms": ["Cityworks", "BluePrince"],
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-884-9541",
+          "infoUrl": "https://www.tompsc.com/1568/Apply-for-Permits-and-Boards-and-Commiss",
+          "notes": "Launched OPAL (Online Permitting and Application Licensing) July 2024. Replaced Cityworks/BluePrince.",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "City of North Charleston",
+          "slug": "north-charleston",
+          "population": "~115,000",
+          "portalUrl": "https://maps.northcharleston.org/CustomerPortal/",
+          "contractorPortalUrl": "https://arc.northcharleston.org/contractors/",
+          "permitApplicationUrl": "https://arc.northcharleston.org/application/index.html",
+          "platform": "Custom ArcGIS-based portal",
+          "portalType": "custom-arcgis",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-740-2562",
+          "infoUrl": "https://www.northcharleston.org/business/construction_and_development/permits/index.php",
+          "status": "needs-scraper"
+        },
+        {
+          "name": "Sullivan's Island",
+          "slug": "sullivans-island",
+          "population": "~2,000",
+          "portalUrl": "https://bsaonline.com/?sitetransition=true&uid=2569",
+          "permitApplyUrl": "https://bsaonline.com/CD_PermitAjaxApplication/ApplyForPermit?applicationGuid=8fe056e6-dee6-45e6-aef6-961cc6e520ad&uid=2569",
+          "platform": "BS&A Online",
+          "portalType": "bsa-online",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-883-5727",
+          "infoUrl": "https://sullivansisland.sc.gov/departments/building-department",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "Isle of Palms",
+          "slug": "isle-of-palms",
+          "population": "~4,500",
+          "portalUrl": "https://www4.citizenserve.com/Portal/PortalController?Action=showPermit&ctzPagePrefix=Portal_&installationID=366",
+          "paymentUrl": "https://ssl.sc.gov/checkout/isleofpalms/BuildingDept.html",
+          "platform": "Citizenserve",
+          "portalType": "citizenserve",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-886-9912",
+          "infoUrl": "https://www.iop.net/building-and-planning/building-permits",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "Kiawah Island",
+          "slug": "kiawah",
+          "population": "~1,600",
+          "portalUrl": "https://www.citizenserve.com/Portal/PortalController?Action=showHomePage&ctzPagePrefix=Portal_&installationID=161",
+          "platform": "Citizenserve",
+          "portalType": "citizenserve",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-768-9166",
+          "infoUrl": "https://www.kiawahisland.gov/departments/building_services.php",
+          "notes": "Has own ARB (Architectural Review Board); building permits also go through Citizenserve.",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "Seabrook Island",
+          "slug": "seabrook",
+          "population": "~2,000",
+          "portalUrl": "https://www.citizenserve.com/Portal/PortalController?Action=showHomePage&ctzPagePrefix=Portal_&installationID=305",
+          "platform": "Citizenserve",
+          "portalType": "citizenserve",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "infoUrl": "https://www.townofseabrookisland.org/building-permits.html",
+          "status": "active-scraper-exists"
+        },
+        {
+          "name": "City of Folly Beach",
+          "slug": "folly-beach",
+          "population": "~2,600",
+          "portalUrl": null,
+          "platform": "Email-based (permits@follybeach.gov)",
+          "portalType": "email-submission",
+          "hasOnlinePermitSearch": false,
+          "hasOnlineApplication": false,
+          "phone": "843-588-2447",
+          "infoUrl": "https://cityoffollybeach.com/building-forms-permits-inspections",
+          "notes": "Permits submitted electronically via email to permits@follybeach.gov. No self-service portal. Uses Momentum for initial application entry, then print and submit.",
+          "status": "needs-scraper"
+        },
+        {
+          "name": "City of Hanahan",
+          "slug": "hanahan",
+          "population": "~25,000",
+          "portalUrl": "https://hanahan.cityforceinc.com/connect/Login.aspx",
+          "platform": "CityForce",
+          "portalType": "cityforce",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-576-5259",
+          "infoUrl": "https://www.cityofhanahan.com/building-codes/page/permits",
+          "status": "needs-scraper"
+        }
+      ]
+    },
+    {
+      "name": "Berkeley County",
+      "countySlug": "berkeley-county",
+      "countySeat": "Moncks Corner",
+      "drivingTimeFromMtPleasant": "30-60 min",
+      "tier": "core",
+      "countyPermitPortal": {
+        "url": "https://build.berkeleycountysc.gov/",
+        "loginUrl": "https://build.berkeleycountysc.gov/login.php",
+        "platform": "EnerGov (Tyler Technologies) with custom Builder's Portal frontend",
+        "portalType": "energov-custom",
+        "infoUrl": "https://berkeleycountysc.gov/energovinfo/",
+        "notes": "Builder's Portal syncs with internal EnerGov system. Data may take up to 24 hours to sync.",
+        "phone": "843-719-4292"
+      },
+      "municipalities": [
+        {
+          "name": "City of Goose Creek",
+          "slug": "goose-creek",
+          "population": "~47,000",
+          "portalUrl": "https://goosecreeksc.portal.opengov.com/",
+          "platform": "OpenGov",
+          "portalType": "opengov",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-797-6220",
+          "infoUrl": "https://www.goosecreeksc.gov/government/departments/administration/building-permits",
+          "status": "needs-scraper"
+        },
+        {
+          "name": "Town of Moncks Corner",
+          "slug": "moncks-corner",
+          "population": "~12,000",
+          "portalUrl": null,
+          "platform": "CommunityCore",
+          "portalType": "communitycore",
+          "hasOnlinePermitSearch": false,
+          "hasOnlineApplication": true,
+          "phone": "843-719-7914",
+          "infoUrl": "https://monckscornersc.gov/government/community-development/building-permits-inspections",
+          "notes": "Contractors must submit a Contractor Software Application to obtain CommunityCore access.",
+          "status": "needs-scraper"
+        }
+      ]
+    },
+    {
+      "name": "Dorchester County",
+      "countySlug": "dorchester-county",
+      "countySeat": "St. George",
+      "drivingTimeFromMtPleasant": "30-60 min",
+      "tier": "core",
+      "countyPermitPortal": {
+        "url": "https://evolvepublic.infovisionsoftware.com/Dorchester/",
+        "platform": "Evolve Public (InfoVision Software)",
+        "portalType": "evolve-infovision",
+        "alternatePortal": {
+          "url": "https://www.citizenserve.com/Portal/PortalController?Action=showHomePage&ctzPagePrefix=Portal_&installationID=301",
+          "platform": "Citizenserve",
+          "notes": "Used for Planning/Zoning and Engineering applications"
+        },
+        "notes": "Building permits through Evolve Public; Planning/Zoning through Citizenserve.",
+        "phone": "843-832-0011"
+      },
+      "municipalities": [
+        {
+          "name": "Town of Summerville",
+          "slug": "summerville",
+          "population": "~53,000",
+          "portalUrl": "https://www.citizenserve.com/Portal/PortalController?Action=showHomePage&ctzPagePrefix=Portal_&installationID=301",
+          "platform": "Citizenserve",
+          "portalType": "citizenserve",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-851-4203",
+          "infoUrl": "https://www.summervillesc.gov/170/Building-Department",
+          "notes": "Shares Citizenserve installationID=301 with Dorchester County.",
+          "status": "needs-scraper"
+        }
+      ]
+    },
+    {
+      "name": "Beaufort County",
+      "countySlug": "beaufort-county",
+      "countySeat": "Beaufort",
+      "drivingTimeFromMtPleasant": "75-90 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.beaufortcountysc.gov/building-codes/forms-and-applications.html",
+        "platform": "PDF forms / limited online",
+        "portalType": "forms-based",
+        "notes": "Beaufort County unincorporated areas appear to use downloadable forms. Online payment available but no full self-service permit portal confirmed.",
+        "phone": "843-255-2078",
+        "email": "inspections@bcgov.net"
+      },
+      "municipalities": [
+        {
+          "name": "Town of Hilton Head Island",
+          "slug": "hilton-head-island",
+          "population": "~40,000",
+          "portalUrl": "https://service.hiltonheadislandsc.gov/CitizenAccess/Site/Public/Main",
+          "platform": "EnerGov (Tyler Technologies)",
+          "portalType": "energov-css",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-341-4757",
+          "email": "cdic@hiltonheadislandsc.gov",
+          "infoUrl": "https://hiltonheadislandsc.gov/css/",
+          "status": "needs-scraper"
+        },
+        {
+          "name": "City of Beaufort",
+          "slug": "beaufort",
+          "population": "~14,000",
+          "portalUrl": "https://www.mygovernmentonline.org/",
+          "platform": "MyGovernmentOnline",
+          "portalType": "mygovernmentonline",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": null,
+          "infoUrl": "https://www.cityofbeaufort.org/481/Permits-Inspections",
+          "status": "needs-scraper"
+        },
+        {
+          "name": "Town of Bluffton",
+          "slug": "bluffton",
+          "population": "~30,000",
+          "portalUrl": "https://townofblufftonsc-energovweb.tylerhost.net/apps/selfservice",
+          "platform": "EnerGov (Tyler Technologies)",
+          "portalType": "energov-css",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "infoUrl": "https://www.townofbluffton.sc.gov/397/Online-Services",
+          "status": "needs-scraper"
+        }
+      ]
+    },
+    {
+      "name": "Georgetown County",
+      "countySlug": "georgetown-county",
+      "countySeat": "Georgetown",
+      "drivingTimeFromMtPleasant": "60-75 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.gtcounty.org/176/Building-Department",
+        "platform": "Unknown / PDF forms",
+        "portalType": "forms-based",
+        "notes": "No dedicated online permit self-service portal identified. PDF applications available. Uses CivicEngage for website/portal framework.",
+        "phone": "843-545-3116"
+      },
+      "municipalities": [
+        {
+          "name": "City of Georgetown",
+          "slug": "georgetown",
+          "population": "~9,500",
+          "portalUrl": null,
+          "platform": "Unknown",
+          "portalType": "unknown",
+          "hasOnlinePermitSearch": false,
+          "hasOnlineApplication": false,
+          "phone": null,
+          "infoUrl": "https://www.georgetownsc.gov/governmental_services/departments/planning___community_development/index.php",
+          "notes": "City of Georgetown Planning & Community Development handles permits within city limits.",
+          "status": "needs-research"
+        }
+      ]
+    },
+    {
+      "name": "Colleton County",
+      "countySlug": "colleton-county",
+      "countySeat": "Walterboro",
+      "drivingTimeFromMtPleasant": "60-75 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.colletoncounty.org/planning-development/building-code-administration",
+        "paymentUrl": "https://ssl.sc.gov/checkout/ColletonCounty/PlanningDevelopment.html",
+        "platform": "SC.GOV payments / PDF forms",
+        "portalType": "forms-based",
+        "notes": "No dedicated online permit self-service portal. Online payments through SC.GOV. PDF applications available.",
+        "phone": "843-549-1709",
+        "email": "treed@colletoncounty.org"
+      },
+      "municipalities": [
+        {
+          "name": "City of Walterboro",
+          "slug": "walterboro",
+          "population": "~5,400",
+          "portalUrl": null,
+          "platform": "Unknown / PDF forms",
+          "portalType": "forms-based",
+          "hasOnlinePermitSearch": false,
+          "hasOnlineApplication": false,
+          "phone": "843-782-1000",
+          "infoUrl": "https://www.walterborosc.org/permits-applications",
+          "notes": "PDF forms available for download. No self-service portal identified.",
+          "status": "needs-research"
+        }
+      ]
+    },
+    {
+      "name": "Williamsburg County",
+      "countySlug": "williamsburg-county",
+      "countySeat": "Kingstree",
+      "drivingTimeFromMtPleasant": "75-90 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.williamsburgcounty.sc.gov/198/Inspections-Permits-Applications",
+        "platform": "Unknown / PDF forms",
+        "portalType": "forms-based",
+        "notes": "PDF permit applications available. No dedicated online permit self-service portal identified.",
+        "phone": "843-354-9321"
+      },
+      "municipalities": []
+    },
+    {
+      "name": "Orangeburg County",
+      "countySlug": "orangeburg-county",
+      "countySeat": "Orangeburg",
+      "drivingTimeFromMtPleasant": "75-90 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.orangeburgcounty.org/223/Permits-Inspections",
+        "platform": "Unknown / PDF forms",
+        "portalType": "forms-based",
+        "notes": "PDF permit applications available. No dedicated online permit self-service portal identified.",
+        "phone": null
+      },
+      "municipalities": [
+        {
+          "name": "City of Orangeburg",
+          "slug": "orangeburg",
+          "population": "~12,800",
+          "portalUrl": null,
+          "platform": "Unknown / PDF forms",
+          "portalType": "forms-based",
+          "hasOnlinePermitSearch": false,
+          "hasOnlineApplication": false,
+          "infoUrl": "https://www.orangeburg.sc.us/public-works/building-inspection",
+          "status": "needs-research"
+        }
+      ]
+    },
+    {
+      "name": "Jasper County",
+      "countySlug": "jasper-county",
+      "countySeat": "Ridgeland",
+      "drivingTimeFromMtPleasant": "75-90 min",
+      "tier": "extended",
+      "countyPermitPortal": {
+        "url": "https://www.jaspercountysc.gov/services/planning-and-building/",
+        "platform": "Unknown (possibly Cloudpermit or Schneider GIS)",
+        "portalType": "unknown",
+        "notes": "Online zoning permit application available. Building permits through Planning and Building department.",
+        "phone": "843-717-3650"
+      },
+      "municipalities": [
+        {
+          "name": "City of Hardeeville",
+          "slug": "hardeeville",
+          "population": "~7,500",
+          "portalUrl": "https://www7.citizenserve.com/Portal/PortalController?Action=showHomePage&ctzPagePrefix=Portal_&installationID=232",
+          "platform": "Citizenserve",
+          "portalType": "citizenserve",
+          "hasOnlinePermitSearch": true,
+          "hasOnlineApplication": true,
+          "phone": "843-784-2231",
+          "email": "permits@hardeevillesc.gov",
+          "infoUrl": "https://hardeevillesc.gov/2637/Permit-License-Portal",
+          "status": "needs-scraper"
+        }
+      ]
+    },
+    {
+      "name": "Clarendon County",
+      "countySlug": "clarendon-county",
+      "countySeat": "Manning",
+      "drivingTimeFromMtPleasant": "80-95 min",
+      "tier": "fringe",
+      "countyPermitPortal": {
+        "url": null,
+        "platform": "Cloudpermit",
+        "portalType": "cloudpermit",
+        "notes": "Clarendon County launched online permitting through Cloudpermit. Allows entirely online permit applications.",
+        "phone": null,
+        "infoUrl": "https://www.clarendoncountysc.gov/business-and-development/planning-and-zoning/"
+      },
+      "municipalities": []
+    }
+  ],
+  "platformSummary": {
+    "EnerGov (Tyler Technologies)": {
+      "description": "Enterprise permitting & licensing. Now branded as Tyler Enterprise Permitting & Licensing. CSS (Citizen Self Service) web portal.",
+      "jurisdictions": [
+        "City of Charleston",
+        "Charleston County",
+        "Berkeley County (backend)",
+        "Town of Hilton Head Island",
+        "Town of Bluffton"
+      ],
+      "typicalPortalUrl": "*/EnerGov_Prod/SelfService or *.tylerhost.net/apps/selfservice"
+    },
+    "Citizenserve": {
+      "description": "Cloud-based community development software for permitting, licensing, code enforcement. Popular with smaller municipalities.",
+      "jurisdictions": [
+        "Dorchester County (Planning/Zoning)",
+        "Town of Summerville",
+        "Isle of Palms",
+        "Kiawah Island",
+        "Seabrook Island",
+        "City of Hardeeville"
+      ],
+      "typicalPortalUrl": "www*.citizenserve.com/Portal/PortalController?...installationID=XXX"
+    },
+    "OpenGov": {
+      "description": "Cloud-based permitting and licensing platform. Formerly a budgeting/transparency platform, now expanded to permitting.",
+      "jurisdictions": [
+        "City of Goose Creek"
+      ],
+      "typicalPortalUrl": "*.portal.opengov.com"
+    },
+    "BS&A Online": {
+      "description": "Municipal services portal for permits, inspections, payments. Used mainly by smaller municipalities.",
+      "jurisdictions": [
+        "Sullivan's Island"
+      ],
+      "typicalPortalUrl": "bsaonline.com/*?uid=XXXX"
+    },
+    "Oracle Cloud (OPAL)": {
+      "description": "Oracle Public Sector Cloud. Mount Pleasant branded their implementation as OPAL (Online Permitting and Application Licensing).",
+      "jurisdictions": [
+        "Town of Mount Pleasant"
+      ],
+      "typicalPortalUrl": "eody.fa.us6.oraclecloud.com/fscmUI/publicSector.html"
+    },
+    "CityForce": {
+      "description": "Permitting, inspections, and code enforcement software by CityForce Inc.",
+      "jurisdictions": [
+        "City of Hanahan"
+      ],
+      "typicalPortalUrl": "*.cityforceinc.com/connect/"
+    },
+    "Evolve Public (InfoVision)": {
+      "description": "Online permit tracking and public information system by InfoVision Software.",
+      "jurisdictions": [
+        "Dorchester County (Building)"
+      ],
+      "typicalPortalUrl": "evolvepublic.infovisionsoftware.com/*"
+    },
+    "CommunityCore": {
+      "description": "Community development and permitting software.",
+      "jurisdictions": [
+        "Town of Moncks Corner"
+      ]
+    },
+    "MyGovernmentOnline": {
+      "description": "Government permitting software with customer portal for permit applications, tracking, and inspections.",
+      "jurisdictions": [
+        "City of Beaufort"
+      ],
+      "typicalPortalUrl": "www.mygovernmentonline.org or www.mgoconnect.org"
+    },
+    "Cloudpermit": {
+      "description": "Online community development software for permitting, licensing, planning/zoning, and inspections.",
+      "jurisdictions": [
+        "Clarendon County"
+      ]
+    },
+    "PDF/Email-based (no portal)": {
+      "description": "Jurisdictions using downloadable PDF forms and/or email submission. No self-service portal.",
+      "jurisdictions": [
+        "Colleton County",
+        "City of Walterboro",
+        "Williamsburg County",
+        "Orangeburg County",
+        "City of Orangeburg",
+        "City of Folly Beach",
+        "Georgetown County",
+        "Beaufort County (unincorporated)"
+      ]
+    }
+  },
+  "scrapingPriority": {
+    "high": {
+      "description": "Large population, high construction activity, have online portals with searchable permit data",
+      "jurisdictions": [
+        {
+          "name": "City of Charleston",
+          "platform": "EnerGov",
+          "status": "scraper-exists",
+          "notes": "Already have working scraper"
+        },
+        {
+          "name": "Town of Mount Pleasant",
+          "platform": "Oracle OPAL",
+          "status": "scraper-exists",
+          "notes": "Already have working scraper. Note: platform changed from ViewPoint to Oracle OPAL in July 2024."
+        },
+        {
+          "name": "City of North Charleston",
+          "platform": "Custom ArcGIS",
+          "status": "needs-scraper",
+          "notes": "2nd largest city in metro. Custom portal will need custom scraper."
+        },
+        {
+          "name": "Town of Summerville",
+          "platform": "Citizenserve",
+          "status": "needs-scraper",
+          "notes": "Fastest growing town in tri-county. Citizenserve scraper could be reused for IOP/Kiawah/Seabrook."
+        },
+        {
+          "name": "City of Goose Creek",
+          "platform": "OpenGov",
+          "status": "needs-scraper",
+          "notes": "Large and growing city. OpenGov portal."
+        },
+        {
+          "name": "Berkeley County",
+          "platform": "EnerGov (custom Builder's Portal)",
+          "status": "needs-scraper",
+          "notes": "Covers large unincorporated area with active development."
+        },
+        {
+          "name": "Charleston County",
+          "platform": "EnerGov",
+          "status": "scraper-exists",
+          "notes": "Already have working scraper"
+        }
+      ]
+    },
+    "medium": {
+      "description": "Moderate population or construction activity, have online portals",
+      "jurisdictions": [
+        {
+          "name": "Town of Hilton Head Island",
+          "platform": "EnerGov",
+          "status": "needs-scraper",
+          "notes": "Major resort community. EnerGov CSS - could reuse Charleston scraper patterns."
+        },
+        {
+          "name": "Town of Bluffton",
+          "platform": "EnerGov",
+          "status": "needs-scraper",
+          "notes": "Rapidly growing. EnerGov on Tyler host."
+        },
+        {
+          "name": "Dorchester County",
+          "platform": "Evolve Public / Citizenserve",
+          "status": "needs-scraper",
+          "notes": "Dual portal system. Growing unincorporated areas."
+        },
+        {
+          "name": "City of Hanahan",
+          "platform": "CityForce",
+          "status": "needs-scraper",
+          "notes": "Growing city in Berkeley County area."
+        },
+        {
+          "name": "Town of Moncks Corner",
+          "platform": "CommunityCore",
+          "status": "needs-scraper",
+          "notes": "Berkeley County seat. Contractor access required."
+        },
+        {
+          "name": "City of Hardeeville",
+          "platform": "Citizenserve",
+          "status": "needs-scraper",
+          "notes": "Growing due to I-95 corridor development."
+        }
+      ]
+    },
+    "low": {
+      "description": "Smaller population, limited online portals, or forms-only",
+      "jurisdictions": [
+        {
+          "name": "Sullivan's Island",
+          "platform": "BS&A Online",
+          "status": "scraper-exists",
+          "notes": "Small but high-value permits."
+        },
+        {
+          "name": "Isle of Palms",
+          "platform": "Citizenserve",
+          "status": "scraper-exists",
+          "notes": "Small but high-value coastal permits."
+        },
+        {
+          "name": "Kiawah Island",
+          "platform": "Citizenserve",
+          "status": "scraper-exists",
+          "notes": "High-value permits."
+        },
+        {
+          "name": "Seabrook Island",
+          "platform": "Citizenserve",
+          "status": "scraper-exists",
+          "notes": "High-value permits."
+        },
+        {
+          "name": "City of Folly Beach",
+          "platform": "Email-based",
+          "status": "not-scrapable",
+          "notes": "No portal to scrape."
+        },
+        {
+          "name": "Georgetown County",
+          "platform": "Forms-based",
+          "status": "not-scrapable",
+          "notes": "No self-service portal."
+        },
+        {
+          "name": "Colleton County / Walterboro",
+          "platform": "Forms-based",
+          "status": "not-scrapable",
+          "notes": "No self-service portal."
+        },
+        {
+          "name": "Williamsburg County",
+          "platform": "Forms-based",
+          "status": "not-scrapable",
+          "notes": "No self-service portal."
+        },
+        {
+          "name": "Orangeburg County",
+          "platform": "Forms-based",
+          "status": "not-scrapable",
+          "notes": "No self-service portal."
+        },
+        {
+          "name": "City of Beaufort",
+          "platform": "MyGovernmentOnline",
+          "status": "needs-scraper",
+          "notes": "Moderate construction activity."
+        },
+        {
+          "name": "Clarendon County",
+          "platform": "Cloudpermit",
+          "status": "needs-scraper",
+          "notes": "Rural, limited construction. Recently launched Cloudpermit."
+        }
+      ]
+    }
+  }
+}

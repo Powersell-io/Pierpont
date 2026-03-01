@@ -1,0 +1,21 @@
+{
+  "name": "sc-permit-tracker",
+  "version": "1.0.0",
+  "description": "SC Coastal Permit Tracker — Scrapes building permit data from municipal portals across the Charleston, SC coastal region",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "scrape": "node scraper/index.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["permits", "scraper", "charleston", "construction"],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "express": "^4.21.0",
+    "sql.js": "^1.11.0",
+    "puppeteer": "^23.9.0",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0"
+  }
+}

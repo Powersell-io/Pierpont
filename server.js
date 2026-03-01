@@ -1,0 +1,149 @@
+// SC Lowcountry Permit Tracker — Express Server
+const express = require('express');
+const path = require('path');
+const config = require('./config');
+const db = require('./db/init');
+const scraper = require('./scraper/index');
+const drywallScanner = require('./scraper/drywall-scanner');
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── Permits API ─────────────────────────────────────────────────────────────
+app.get('/api/permits', async (req, res) => {
+  try { res.json(await db.queryPermits(req.query)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/permits/:id', async (req, res) => {
+  try {
+    const permit = await db.getPermitById(req.params.id);
+    if (!permit) return res.status(404).json({ error: 'Not found' });
+    res.json(permit);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Scraper API ─────────────────────────────────────────────────────────────
+let scrapeInProgress = false;
+app.post('/api/scrape', async (req, res) => {
+  if (scrapeInProgress) return res.status(409).json({ error: 'Scrape already in progress', status: scraper.getStatus() });
+  scrapeInProgress = true;
+  res.json({ message: 'Scrape started', status: 'running' });
+  try { await scraper.runAllScrapers(req.body || {}); }
+  catch (err) { console.error('Scrape error:', err); }
+  finally { scrapeInProgress = false; }
+});
+
+// Test scrape — only process N permits (default 5)
+app.post('/api/scrape/test', async (req, res) => {
+  if (scrapeInProgress) return res.status(409).json({ error: 'Scrape already in progress' });
+  scrapeInProgress = true;
+  const limit = parseInt(req.body?.limit) || 5;
+  res.json({ message: `Test scrape started (limit: ${limit})`, status: 'running' });
+  try { await scraper.runAllScrapers({ testLimit: limit }); }
+  catch (err) { console.error('Test scrape error:', err); }
+  finally { scrapeInProgress = false; }
+});
+
+app.get('/api/scrape/status', (req, res) => {
+  res.json({ running: scrapeInProgress, ...(scraper.getStatus() || { status: 'idle' }) });
+});
+
+app.get('/api/scrapers', (req, res) => { res.json(scraper.getScraperInfo()); });
+
+// ─── Municipalities & Filter Options ─────────────────────────────────────────
+app.get('/api/municipalities', (req, res) => {
+  const munis = config.municipalities;
+  const driveTimes = config.driveTimesFrom29464;
+  const result = Object.values(munis).map(m => ({
+    name: m.name,
+    slug: m.slug,
+    active: m.active,
+    portalType: m.portalType,
+    driveTimeMinutes: m.driveTimeMinutes,
+  }));
+  res.json(result);
+});
+
+app.get('/api/filters/options', async (req, res) => {
+  try {
+    const distinct = await db.getDistinctValues();
+    const driveTimes = config.driveTimesFrom29464;
+    res.json({ ...distinct, driveTimes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Stats API ───────────────────────────────────────────────────────────────
+app.get('/api/stats', async (req, res) => {
+  try { res.json(await db.getStats(req.query)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── CSV Export ──────────────────────────────────────────────────────────────
+app.get('/api/export/csv', async (req, res) => {
+  try {
+    const permits = await db.getAllPermitsForExport(req.query);
+    const headers = ['Permit Number','Address','Municipality','Builder Name','Builder Company','Builder Phone','Builder Email','Applicant Name','Applicant Phone','Applicant Email','Owner Name','Project Value','Permit Type','Inspection Type','Inspection Date','Inspection Status','Permit Issue Date','Opportunity Score','Source URL','Scraped At'];
+    const esc = (v) => { if (v == null) return ''; const s = String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const rows = permits.map(p => [p.permit_number,p.address,p.municipality,p.builder_name,p.builder_company,p.builder_phone,p.builder_email,p.applicant_name,p.applicant_phone,p.applicant_email,p.owner_name,p.project_value,p.permit_type,p.inspection_type,p.inspection_date,p.inspection_status,p.permit_issue_date,p.opportunity_score,p.source_url,p.scraped_at].map(esc).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const today = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="permit-tracker-${today}.csv"`);
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Drywall Opportunity Scanner API ─────────────────────────────────────────
+let drywallScanInProgress = false;
+app.post('/api/scan/drywall', async (req, res) => {
+  if (drywallScanInProgress) return res.status(409).json({ error: 'Scan already in progress' });
+  drywallScanInProgress = true;
+  res.json({ message: 'Drywall scan started' });
+  try { await drywallScanner.runScan(); }
+  catch (err) { console.error('Drywall scan error:', err); }
+  finally { drywallScanInProgress = false; }
+});
+
+app.get('/api/scan/drywall/status', (req, res) => {
+  res.json({ running: drywallScanInProgress, ...(drywallScanner.getScanStatus() || { status: 'idle' }) });
+});
+
+app.get('/api/opportunities', async (req, res) => {
+  try { res.json(await db.getOpportunities(req.query)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Clear All Data ──────────────────────────────────────────────────────────
+app.delete('/api/clear', async (req, res) => {
+  try {
+    await db.clearAllData();
+    res.json({ message: 'All data cleared' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Future placeholders ─────────────────────────────────────────────────────
+app.post('/api/enrich/:permit_id', async (req, res) => { res.status(501).json({ error: 'Contact enrichment not yet implemented' }); });
+app.post('/api/ghl/push/:permit_id', async (req, res) => { res.status(501).json({ error: 'GoHighLevel integration not yet implemented' }); });
+
+// Serve frontend
+app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+
+// ─── Start ───────────────────────────────────────────────────────────────────
+async function start() {
+  await db.getDb();
+  await db.backfillOpportunityScores();
+  app.listen(config.server.port, () => {
+    console.log('');
+    console.log('🏗️  SC Lowcountry Permit Tracker');
+    console.log(`📡 Server running at http://${config.server.host}:${config.server.port}`);
+    console.log('💾 Database initialized');
+    console.log('🔍 Ready to scrape permits');
+    console.log('');
+  });
+}
+start();
+
+process.on('SIGINT', () => { db.close(); process.exit(0); });
+process.on('SIGTERM', () => { db.close(); process.exit(0); });
