@@ -116,7 +116,7 @@ app.get('/api/foia/municipalities', (req, res) => {
     .map(m => {
       const entry = { name: m.name, slug: m.slug, driveTimeMinutes: m.driveTimeMinutes, foiaType: m.foia.type };
       if (m.foia.type === 'email') {
-        const subject = encodeURIComponent('FOIA REQUEST');
+        const subject = encodeURIComponent('FOIA REQUEST — Strapping Inspections');
         const body = encodeURIComponent(FOIA_BODY);
         entry.email = m.foia.email;
         entry.mailtoUrl = `mailto:${m.foia.email}?subject=${subject}&body=${body}`;
