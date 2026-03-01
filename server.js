@@ -8,8 +8,88 @@ const scraper = require('./scraper/index');
 const drywallScanner = require('./scraper/drywall-scanner');
 const builderLookup = require('./scraper/builderLookup');
 
+const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
+
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+const APP_PASSWORD = 'Bulleit';
+const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+const sessions = new Set();
+
+function createSession() {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.add(token);
+  return token;
+}
+
+function isAuthenticated(req) {
+  return req.cookies?.session && sessions.has(req.cookies.session);
+}
+
+const LOGIN_HTML = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Pierpont Money Printer — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Fira+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Fira Sans',system-ui,sans-serif;background:linear-gradient(135deg,#0F172A 0%,#1E293B 30%,#0F172A 60%,#1a1a3e 100%);color:#E2E8F0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:rgba(255,255,255,0.06);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:40px;width:380px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.4);text-align:center}
+.logo{height:64px;margin-bottom:16px}
+h1{font-family:'Fira Code',monospace;font-size:1.3rem;font-weight:700;background:linear-gradient(135deg,#3B82C4,#2B6CB0,#6B7B8D);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.sub{font-size:.75rem;color:#94A3B8;margin-bottom:28px;letter-spacing:.04em}
+input[type=password]{width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 16px;font-size:.95rem;color:#E2E8F0;font-family:'Fira Sans',sans-serif;outline:none;transition:border .2s,box-shadow .2s;margin-bottom:16px}
+input[type=password]:focus{border-color:#2B6CB0;box-shadow:0 0 0 3px rgba(43,108,176,0.3)}
+input[type=password]::placeholder{color:#94A3B8;opacity:.6}
+button{width:100%;background:linear-gradient(135deg,#3B82C4,#2B6CB0);color:white;font-weight:600;border:none;border-radius:12px;padding:12px;cursor:pointer;font-size:.95rem;transition:all .25s;box-shadow:0 4px 15px rgba(43,108,176,0.3)}
+button:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(43,108,176,0.5)}
+</style>
+</head><body>
+<div class="card">
+<img src="/logo.png" alt="Pierpont" class="logo">
+<h1>Pierpont Money Printer</h1>
+<p class="sub">SC Lowcountry Construction Lead Intelligence</p>
+<!--ERROR-->
+<form method="POST" action="/login">
+<input type="password" name="password" placeholder="Enter password" autofocus required>
+<button type="submit">Sign In</button>
+</form>
+</div>
+</body></html>`;
+
+// Login page
+app.get('/login', (req, res) => {
+  if (isAuthenticated(req)) return res.redirect('/');
+  res.send(LOGIN_HTML);
+});
+
+app.post('/login', (req, res) => {
+  if (req.body?.password === APP_PASSWORD) {
+    const token = createSession();
+    res.cookie('session', token, { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 }); // 30 days
+    return res.redirect('/');
+  }
+  res.send(LOGIN_HTML.replace('<!--ERROR-->', '<div style="color:#FCA5A5;font-size:.85rem;margin-bottom:12px;text-align:center">Incorrect password</div>'));
+});
+
+app.get('/logout', (req, res) => {
+  if (req.cookies?.session) sessions.delete(req.cookies.session);
+  res.clearCookie('session');
+  res.redirect('/login');
+});
+
+// Auth middleware — protect everything except /login and static login assets
+app.use((req, res, next) => {
+  if (req.path === '/login' || req.path === '/logo.png') return next();
+  if (!isAuthenticated(req)) return res.redirect('/login');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Permits API ─────────────────────────────────────────────────────────────
