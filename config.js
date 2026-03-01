@@ -242,7 +242,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 25,
       notes: 'Login-walled CityForce portal',
-      foia: { type: 'portal', portalUrl: 'https://hanahan.nextrequest.com/' },
+      foia: { type: 'portal', portalUrl: 'https://cityofhanahansc.nextrequest.com/requests/new' },
     },
     charlestonCounty: {
       name: 'Charleston County',
@@ -364,7 +364,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 80,
       notes: 'MyGovernmentOnline — needs research',
-      foia: { type: 'portal', portalUrl: 'https://beaufort.nextrequest.com/' },
+      foia: { type: 'portal', portalUrl: 'https://beaufortcountysc.justfoia.com/publicportal/home/newrequest' },
     },
     hiltonHead: {
       name: 'Town of Hilton Head Island',

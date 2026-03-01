@@ -3,60 +3,245 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SC Lowcountry Permit Tracker</title>
+  <title>Pierpont Money Printer</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { --navy:#1a1a2e; --navy-light:#16213e; --accent:#0f3460; --green:#10b981; }
-    body { font-family:'Segoe UI',system-ui,sans-serif; background:#f3f4f6; }
-    .header-bg { background:linear-gradient(135deg,var(--navy),var(--navy-light),var(--accent)); }
-    .badge { display:inline-flex;align-items:center;padding:2px 8px;border-radius:9999px;font-size:.7rem;font-weight:600; }
-    .badge-green { background:#d1fae5;color:#065f46; } .badge-blue { background:#dbeafe;color:#1e40af; }
-    .badge-gray { background:#f3f4f6;color:#4b5563; } .badge-yellow { background:#fef3c7;color:#92400e; }
-    .badge-red { background:#fee2e2;color:#991b1b; }
-    .table-row:hover { background:#f0f9ff; }
-    .table-row:nth-child(even) { background:#f9fafb; }
-    .table-row:nth-child(even):hover { background:#f0f9ff; }
-    .table-row.high-value { border-left:4px solid #f59e0b; }
-    .table-row.high-value td:first-child { padding-left:8px; }
-    .sort-header { cursor:pointer;user-select:none; } .sort-header:hover { background:#e2e8f0; }
-    .sort-arrow { opacity:.3;margin-left:4px; } .sort-arrow.active { opacity:1; }
-    .detail-row { display:none; } .detail-row.open { display:table-row; }
+    :root {
+      --glass-bg: rgba(255,255,255,0.08);
+      --glass-border: rgba(255,255,255,0.12);
+      --glass-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      --glass-blur: 20px;
+      --blue: #2B6CB0;
+      --blue-light: #3B82C4;
+      --blue-glow: rgba(43,108,176,0.3);
+      --steel: #6B7B8D;
+      --green: #22C55E;
+      --green-glow: rgba(34,197,94,0.3);
+      --surface: rgba(15,23,42,0.6);
+      --text: #E2E8F0;
+      --text-dim: #94A3B8;
+      --text-bright: #F8FAFC;
+      --accent: #2B6CB0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Fira Sans', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0F172A 0%, #1E293B 30%, #0F172A 60%, #1a1a3e 100%);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+      background: radial-gradient(ellipse at 20% 50%, rgba(43,108,176,0.1) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 20%, rgba(107,123,141,0.08) 0%, transparent 50%),
+                  radial-gradient(ellipse at 50% 80%, rgba(43,108,176,0.06) 0%, transparent 50%);
+      animation: ambient 20s ease-in-out infinite alternate;
+      pointer-events: none; z-index: 0;
+    }
+    @keyframes ambient {
+      0% { transform: translate(0,0) rotate(0deg); }
+      100% { transform: translate(-5%,3%) rotate(3deg); }
+    }
+
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+    }
+    .glass-strong {
+      background: rgba(15,23,42,0.7);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .glass-card:hover {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.15);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+    .glass-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: .875rem;
+      color: var(--text);
+      font-family: 'Fira Sans', sans-serif;
+      transition: all 0.25s ease;
+    }
+    .glass-input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-glow);
+      background: rgba(255,255,255,0.08);
+    }
+    .glass-input::placeholder { color: var(--text-dim); opacity: 0.6; }
+    select.glass-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394A3B8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+    select.glass-input option { background: #1E293B; color: #E2E8F0; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--blue-light), var(--blue));
+      color: white; font-weight: 600; border: none; border-radius: 12px;
+      padding: 10px 24px; cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 15px var(--blue-glow);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(43,108,176,0.5); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-glass {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text); border-radius: 10px;
+      padding: 8px 16px; cursor: pointer;
+      transition: all 0.25s ease; font-size: .875rem;
+    }
+    .btn-glass:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+
+    .btn-danger {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.2);
+      color: #FCA5A5; border-radius: 10px;
+      padding: 8px 16px; cursor: pointer;
+      transition: all 0.25s ease; font-size: .875rem;
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); }
+
+    .stat-value {
+      font-family: 'Fira Code', monospace;
+      font-size: 1.75rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--text-bright), var(--text));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-value.highlight {
+      background: linear-gradient(135deg, var(--blue), var(--blue-light));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .badge { display:inline-flex;align-items:center;padding:3px 10px;border-radius:9999px;font-size:.7rem;font-weight:600;font-family:'Fira Code',monospace; }
+    .badge-green { background:rgba(34,197,94,0.15);color:#4ADE80;border:1px solid rgba(34,197,94,0.2); }
+    .badge-blue { background:rgba(59,130,246,0.15);color:#93C5FD;border:1px solid rgba(59,130,246,0.2); }
+    .badge-gray { background:rgba(148,163,184,0.1);color:#94A3B8;border:1px solid rgba(148,163,184,0.15); }
+    .badge-yellow { background:rgba(234,179,8,0.15);color:#FDE047;border:1px solid rgba(234,179,8,0.2); }
+    .badge-red { background:rgba(239,68,68,0.15);color:#FCA5A5;border:1px solid rgba(239,68,68,0.2); }
+
+    .chip {
+      display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:9999px;
+      font-size:.75rem;font-weight:500;
+      background:rgba(43,108,176,0.1);color:#93C5FD;border:1px solid rgba(43,108,176,0.2);
+    }
+    .chip button { background:none;border:none;color:#93C5FD;cursor:pointer;font-size:.85rem;line-height:1;padding:0 2px;opacity:.7; }
+    .chip button:hover { opacity:1; }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .8rem; }
+    .data-table thead th {
+      padding: 12px 12px; text-align: left;
+      font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-dim);
+      background: rgba(15,23,42,0.5);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .data-table thead th.sort-header { cursor: pointer; user-select: none; transition: color 0.2s; }
+    .data-table thead th.sort-header:hover { color: var(--blue-light); }
+    .sort-arrow { opacity:.3;margin-left:4px;font-size:.6rem; } .sort-arrow.active { opacity:1;color:var(--blue-light); }
+    .data-table tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .data-table tbody tr:hover { background: rgba(43,108,176,0.06); }
+    .data-table tbody tr.high-value { border-left: 3px solid var(--blue); }
+    .data-table tbody td { padding: 10px 12px; vertical-align: middle; }
+    .detail-row { display:none; }
+    .detail-row.open { display:table-row; }
+    .detail-row td { background: rgba(43,108,176,0.03); }
+    .empty-cell { color: rgba(148,163,184,0.4); }
+
+    a { color: #60A5FA; text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #93C5FD; }
+
     .spinner { animation:spin 1s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
-    .empty-cell { color:#9ca3af; }
-    input[type="text"], input[type="date"], input[type="number"], select {
-      border:1px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:.875rem;background:white;
+
+    .progress-bar {
+      background: rgba(255,255,255,0.05);
+      border-radius: 100px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
     }
-    input:focus, select:focus { outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1); }
-    .chip { display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:9999px;font-size:.75rem;font-weight:500;background:#dbeafe;color:#1e40af;cursor:default; }
-    .chip button { background:none;border:none;color:#1e40af;cursor:pointer;font-size:.85rem;line-height:1;padding:0 2px;opacity:.7; }
-    .chip button:hover { opacity:1; }
+    .progress-fill {
+      height: 4px;
+      background: linear-gradient(90deg, var(--blue), var(--blue-light));
+      border-radius: 100px;
+      transition: width 0.5s ease;
+    }
+
+    .logo-text {
+      font-family: 'Fira Code', monospace;
+      font-weight: 700; font-size: 1.6rem; letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--blue-light), var(--blue), var(--steel));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .logo-sub {
+      font-family: 'Fira Sans', sans-serif;
+      font-size: .8rem; color: var(--text-dim); font-weight: 300;
+      letter-spacing: 0.05em;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+    @media (max-width: 768px) {
+      .logo-text { font-size: 1.2rem; }
+      .stat-value { font-size: 1.3rem; }
+    }
   </style>
 </head>
-<body class="min-h-screen">
-
+<body>
   <!-- Header -->
-  <header class="header-bg text-white shadow-lg">
-    <div class="max-w-7xl mx-auto px-4 py-5 sm:px-6">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">SC Lowcountry Permit Tracker</h1>
-          <p class="text-blue-200 text-sm mt-1">Building permits &mdash; Charleston metro &amp; surrounding jurisdictions</p>
+  <header class="glass-strong sticky top-0 z-50" style="border-top:3px solid var(--blue)">
+    <div class="max-w-screen-2xl mx-auto px-4 py-4 sm:px-6">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <img src="/logo.png" alt="Pierpont Construction" style="height:48px;width:auto;border-radius:6px;">
+          <div>
+            <h1 class="logo-text">Pierpont Money Printer</h1>
+            <p class="logo-sub">SC Lowcountry Construction Lead Intelligence</p>
+          </div>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
-          <div id="lastScrapedInfo" class="text-xs text-blue-300 text-right hidden">
+          <div id="lastScrapedInfo" class="text-xs text-right hidden" style="color:var(--text-dim)">
             <div>Last scraped:</div>
-            <div id="lastScrapedTime" class="font-medium text-blue-100"></div>
+            <div id="lastScrapedTime" class="font-medium" style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem"></div>
           </div>
-          <button id="btnScrape" onclick="startScrape()"
-            class="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-lg shadow transition-colors">
-            <span id="scrapeIcon">&#x1f504;</span>
+          <button id="btnScrape" onclick="startScrape()" class="btn-primary flex items-center gap-2">
+            <span id="scrapeIcon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></span>
             <span id="scrapeText">Run Scraper</span>
           </button>
-          <button id="btnLookup" onclick="startBuilderLookup()"
-            class="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition-colors text-sm">
-            <span id="lookupIcon">&#x1f50d;</span>
+          <button id="btnLookup" onclick="startBuilderLookup()" class="btn-glass flex items-center gap-2">
+            <span id="lookupIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
             <span id="lookupText">Lookup Builders</span>
+          </button>
+          <button id="btnSchedule" onclick="toggleSchedule()" class="btn-glass flex items-center gap-2" title="Auto-scrape at 7am, 1pm, 6pm EST">
+            <span id="scheduleIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+            <span id="scheduleText">Auto: ON</span>
           </button>
         </div>
       </div>
@@ -64,36 +249,36 @@
   </header>
 
   <!-- Progress Bar -->
-  <div id="scrapeProgress" class="hidden bg-blue-50 border-b border-blue-200">
-    <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex items-center gap-3">
-      <svg class="spinner w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+  <div id="scrapeProgress" class="hidden" style="background:rgba(43,108,176,0.05);border-bottom:1px solid rgba(43,108,176,0.1)">
+    <div class="max-w-screen-2xl mx-auto px-4 py-3 sm:px-6 flex items-center gap-3">
+      <svg class="spinner w-5 h-5" style="color:var(--blue)" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
       <div class="flex-1">
-        <div class="text-sm font-medium text-blue-800" id="scrapeStatusText">Scraping...</div>
-        <div class="text-xs text-blue-600 mt-0.5" id="scrapeDetailText">Initializing...</div>
+        <div class="text-sm font-medium" style="color:#93C5FD" id="scrapeStatusText">Scraping...</div>
+        <div class="text-xs mt-0.5" style="color:var(--text-dim)" id="scrapeDetailText">Initializing...</div>
       </div>
-      <div class="text-sm font-medium text-blue-700" id="scrapeCountText"></div>
+      <div class="text-sm font-medium" style="color:var(--blue);font-family:'Fira Code',monospace" id="scrapeCountText"></div>
     </div>
   </div>
 
-  <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6">
+  <main class="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 relative z-10">
 
     <!-- Stats -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-      <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-        <div class="text-xs font-medium text-gray-500 uppercase">Total Permits</div>
-        <div class="text-2xl font-bold text-gray-900 mt-1" id="statTotal">0</div>
+      <div class="glass-card p-5">
+        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Total Permits</div>
+        <div class="stat-value mt-2" id="statTotal">0</div>
       </div>
-      <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-        <div class="text-xs font-medium text-gray-500 uppercase">Avg Value</div>
-        <div class="text-2xl font-bold text-gray-900 mt-1" id="statAvgValue">$0</div>
+      <div class="glass-card p-5">
+        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Avg Value</div>
+        <div class="stat-value mt-2" id="statAvgValue">$0</div>
       </div>
-      <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-        <div class="text-xs font-medium text-gray-500 uppercase">$300K+ Projects</div>
-        <div class="text-2xl font-bold text-amber-600 mt-1" id="statHighValue">0</div>
+      <div class="glass-card p-5">
+        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">$300K+ Projects</div>
+        <div class="stat-value highlight mt-2" id="statHighValue">0</div>
       </div>
-      <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-        <div class="text-xs font-medium text-gray-500 uppercase">Date Range</div>
-        <div class="text-sm font-bold text-gray-900 mt-1" id="statDateRange">&mdash;</div>
+      <div class="glass-card p-5">
+        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Date Range</div>
+        <div class="text-sm font-bold mt-2" style="font-family:'Fira Code',monospace;color:var(--text)" id="statDateRange">&mdash;</div>
       </div>
     </div>
 
@@ -101,16 +286,15 @@
     <div id="filterChips" class="hidden flex flex-wrap gap-2 mb-3"></div>
 
     <!-- Filter Panel -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6">
-      <!-- Row 1: Search + Distance -->
+    <div class="glass-card p-5 mb-6">
       <div class="flex flex-wrap items-end gap-3 mb-3">
         <div class="flex-1 min-w-64">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Search</label>
-          <input type="text" id="filterSearch" placeholder="Address, builder, company, phone, email, permit #..." class="w-full" oninput="debouncedUpdate()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Search</label>
+          <input type="text" id="filterSearch" placeholder="Address, builder, phone, email, permit #..." class="glass-input w-full" oninput="debouncedUpdate()">
         </div>
         <div class="w-40">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Max Distance</label>
-          <select id="filterDistance" class="w-full" onchange="updateFilters()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Max Distance</label>
+          <select id="filterDistance" class="glass-input w-full" onchange="updateFilters()">
             <option value="">All distances</option>
             <option value="15">Within 15 min</option>
             <option value="30">Within 30 min</option>
@@ -121,96 +305,92 @@
           </select>
         </div>
       </div>
-      <!-- Row 2: Municipality, Dates, Value, Status, Actions -->
       <div class="flex flex-wrap items-end gap-3">
         <div class="w-48">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Municipality</label>
-          <select id="filterMunicipality" class="w-full" onchange="updateFilters()">
-            <option value="">All municipalities</option>
-          </select>
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Municipality</label>
+          <select id="filterMunicipality" class="glass-input w-full" onchange="updateFilters()"><option value="">All municipalities</option></select>
         </div>
         <div class="w-36">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Date From</label>
-          <input type="date" id="filterDateFrom" class="w-full" onchange="updateFilters()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Date From</label>
+          <input type="date" id="filterDateFrom" class="glass-input w-full" onchange="updateFilters()">
         </div>
         <div class="w-36">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Date To</label>
-          <input type="date" id="filterDateTo" class="w-full" onchange="updateFilters()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Date To</label>
+          <input type="date" id="filterDateTo" class="glass-input w-full" onchange="updateFilters()">
         </div>
         <div class="w-28">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Min Value</label>
-          <input type="number" id="filterMinValue" placeholder="$0" class="w-full" onchange="updateFilters()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Min Value</label>
+          <input type="number" id="filterMinValue" placeholder="$0" class="glass-input w-full" onchange="updateFilters()">
         </div>
         <div class="w-28">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Max Value</label>
-          <input type="number" id="filterMaxValue" placeholder="Any" class="w-full" onchange="updateFilters()">
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Max Value</label>
+          <input type="number" id="filterMaxValue" placeholder="Any" class="glass-input w-full" onchange="updateFilters()">
         </div>
         <div class="w-40">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
-          <select id="filterStatus" class="w-full" onchange="updateFilters()">
-            <option value="">All statuses</option>
-          </select>
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Status</label>
+          <select id="filterStatus" class="glass-input w-full" onchange="updateFilters()"><option value="">All statuses</option></select>
         </div>
         <div class="flex gap-2">
-          <button onclick="resetFilters()" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200">Reset</button>
-          <button onclick="exportCSV()" class="flex items-center gap-1 px-4 py-2 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-900">&#x1f4e5; CSV</button>
-          <button id="btnClear" onclick="handleClearClick()" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg border border-red-200">Clear All</button>
+          <button onclick="resetFilters()" class="btn-glass">Reset</button>
+          <button onclick="exportCSV()" class="btn-glass flex items-center gap-1.5"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> CSV</button>
+          <button id="btnClear" onclick="handleClearClick()" class="btn-danger">Clear All</button>
         </div>
       </div>
     </div>
 
-    <!-- FOIA Requests Panel -->
-    <div id="foiaPanel" class="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6 hidden">
+    <!-- FOIA Panel -->
+    <div id="foiaPanel" class="glass-card p-5 mb-6 hidden">
       <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="toggleFoiaPanel()">
-        <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">FOIA Requests &mdash; Municipalities Without Public Portals</h3>
-        <span id="foiaToggle" class="text-gray-400 text-xs">&#x25BC;</span>
+        <h3 class="text-xs font-semibold uppercase tracking-wider" style="color:var(--text-dim)">FOIA Requests &mdash; Municipalities Without Public Portals</h3>
+        <span id="foiaToggle" style="color:var(--text-dim)">&#x25BC;</span>
       </div>
       <div id="foiaBody">
-        <p class="text-xs text-gray-500 mb-3">These municipalities require a SC FOIA request to obtain permit data. Click to send a pre-filled email or visit their request portal.</p>
+        <p class="text-xs mb-3" style="color:var(--text-dim)">These municipalities require a SC FOIA request to obtain permit data.</p>
         <div id="foiaList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
       </div>
     </div>
 
     <!-- Results Table -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-6">
+    <div class="glass-card overflow-hidden mb-6" style="border-radius:16px;position:relative">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:500px;background:url('/logo.png') no-repeat center center;background-size:contain;opacity:0.06;pointer-events:none;z-index:0"></div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="data-table">
           <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('address')">Address<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('municipality')">Municipality<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('builder_name')">Builder (Applicant)<span class="sort-arrow" id="sort-builder_name">&#x25B2;</span></th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Biz Phone</th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Biz Email</th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Personal Phone</th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Personal Email</th>
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('owner_name')">Owner<span class="sort-arrow" id="sort-owner_name">&#x25B2;</span></th>
-              <th class="sort-header px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('inspection_date')">Date<span class="sort-arrow" id="sort-inspection_date">&#x25B2;</span></th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-              <th class="sort-header px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('opportunity_score')">Score<span class="sort-arrow active" id="sort-opportunity_score">&#x25BC;</span></th>
-              <th class="sort-header px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase" onclick="sortBy('permit_number')">Permit #<span class="sort-arrow" id="sort-permit_number">&#x25B2;</span></th>
-              <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Detail</th>
+            <tr>
+              <th class="sort-header" onclick="sortBy('address')">Address<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('municipality')">Municipality<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('builder_name')">Builder<span class="sort-arrow" id="sort-builder_name">&#x25B2;</span></th>
+              <th>Biz Phone</th>
+              <th>Biz Email</th>
+              <th>Personal Phone</th>
+              <th>Personal Email</th>
+              <th class="sort-header" onclick="sortBy('owner_name')">Owner<span class="sort-arrow" id="sort-owner_name">&#x25B2;</span></th>
+              <th class="sort-header" style="text-align:right" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('inspection_date')">Date<span class="sort-arrow" id="sort-inspection_date">&#x25B2;</span></th>
+              <th>Status</th>
+              <th class="sort-header" style="text-align:center" onclick="sortBy('opportunity_score')">Score<span class="sort-arrow active" id="sort-opportunity_score">&#x25BC;</span></th>
+              <th class="sort-header" onclick="sortBy('permit_number')">Permit #<span class="sort-arrow" id="sort-permit_number">&#x25B2;</span></th>
+              <th>Detail</th>
             </tr>
           </thead>
           <tbody id="permitsTableBody">
-            <tr><td colspan="14" class="px-6 py-12 text-center text-gray-400">
-              <div class="text-4xl mb-2">&#x1f50d;</div>
-              <div class="text-lg font-medium">No permits loaded</div>
-              <div class="text-sm mt-1">Click "Run Scraper" to fetch permits from SC Lowcountry portals.</div>
+            <tr><td colspan="14" class="px-6 py-16 text-center" style="color:var(--text-dim)">
+              <svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <div class="text-base font-medium" style="color:var(--text)">No permits loaded</div>
+              <div class="text-sm mt-1">Click <strong style="color:var(--blue)">Run Scraper</strong> to fetch permits.</div>
             </td></tr>
           </tbody>
         </table>
       </div>
-      <div id="pagination" class="hidden border-t border-gray-200 px-4 py-3 flex items-center justify-between bg-gray-50">
-        <div class="text-sm text-gray-600" id="paginationInfo"></div>
+      <div id="pagination" class="hidden px-5 py-3 flex items-center justify-between" style="border-top:1px solid rgba(255,255,255,0.04);background:rgba(15,23,42,0.3)">
+        <div class="text-xs" style="color:var(--text-dim);font-family:'Fira Code',monospace" id="paginationInfo"></div>
         <div class="flex gap-1" id="paginationButtons"></div>
       </div>
     </div>
   </main>
 
-  <footer class="max-w-7xl mx-auto px-4 py-4 sm:px-6 text-center text-xs text-gray-400">
-    SC Lowcountry Permit Tracker &mdash; Data from public permit portals
+  <footer class="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 text-center relative z-10" style="font-size:.7rem;color:rgba(148,163,184,0.4)">
+    Pierpont Money Printer &mdash; SC Lowcountry Construction Lead Intelligence
   </footer>
 
 <script>
@@ -218,444 +398,186 @@ let currentSort = { column: 'opportunity_score', order: 'desc' };
 let currentPage = 1;
 let scrapeCheckInterval = null;
 
-// All active filter values
-let filters = {
-  search: '',
-  max_drive_time: '',
-  municipality: '',
-  date_from: '',
-  date_to: '',
-  min_value: '',
-  max_value: '',
-  inspection_status: '',
-};
+let filters = { search:'', max_drive_time:'', municipality:'', date_from:'', date_to:'', min_value:'', max_value:'', inspection_status:'' };
 
 const ENERGOV_BASE = 'https://egcss.charleston-sc.gov/EnerGov_Prod/selfservice';
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadFilterOptions();
-  loadPermits();
-  loadStats();
-  loadFoiaMunicipalities();
-});
+document.addEventListener('DOMContentLoaded', () => { loadFilterOptions(); loadPermits(); loadStats(); loadFoiaMunicipalities(); loadScheduleStatus(); });
 
-// ── Filter Options ────
 async function loadFilterOptions() {
   try {
     const opts = await (await fetch('/api/filters/options')).json();
-
-    const muniSelect = document.getElementById('filterMunicipality');
-    (opts.municipalities || []).forEach(m => {
-      const o = document.createElement('option');
-      o.value = m; o.textContent = m;
-      muniSelect.appendChild(o);
-    });
-
-    const statusSelect = document.getElementById('filterStatus');
-    (opts.statuses || []).forEach(s => {
-      const o = document.createElement('option');
-      o.value = s; o.textContent = s;
-      statusSelect.appendChild(o);
-    });
-  } catch (e) { console.error('Failed to load filter options:', e); }
+    const ms = document.getElementById('filterMunicipality');
+    (opts.municipalities||[]).forEach(m => { const o=document.createElement('option'); o.value=m; o.textContent=m; ms.appendChild(o); });
+    const ss = document.getElementById('filterStatus');
+    (opts.statuses||[]).forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; ss.appendChild(o); });
+  } catch(e){}
 }
 
-// ── Filter Management ────
 function readFiltersFromUI() {
-  filters.search = document.getElementById('filterSearch').value.trim();
-  filters.max_drive_time = document.getElementById('filterDistance').value;
-  filters.municipality = document.getElementById('filterMunicipality').value;
-  filters.date_from = document.getElementById('filterDateFrom').value;
-  filters.date_to = document.getElementById('filterDateTo').value;
-  filters.min_value = document.getElementById('filterMinValue').value;
-  filters.max_value = document.getElementById('filterMaxValue').value;
-  filters.inspection_status = document.getElementById('filterStatus').value;
+  filters.search=document.getElementById('filterSearch').value.trim();
+  filters.max_drive_time=document.getElementById('filterDistance').value;
+  filters.municipality=document.getElementById('filterMunicipality').value;
+  filters.date_from=document.getElementById('filterDateFrom').value;
+  filters.date_to=document.getElementById('filterDateTo').value;
+  filters.min_value=document.getElementById('filterMinValue').value;
+  filters.max_value=document.getElementById('filterMaxValue').value;
+  filters.inspection_status=document.getElementById('filterStatus').value;
 }
-
-function updateFilters() {
-  readFiltersFromUI();
-  renderChips();
-  currentPage = 1;
-  loadPermits();
-}
-
+function updateFilters() { readFiltersFromUI(); renderChips(); currentPage=1; loadPermits(); }
 let debounceTimer;
-function debouncedUpdate() { clearTimeout(debounceTimer); debounceTimer = setTimeout(updateFilters, 300); }
+function debouncedUpdate() { clearTimeout(debounceTimer); debounceTimer=setTimeout(updateFilters,300); }
 
 function renderChips() {
-  const container = document.getElementById('filterChips');
-  container.innerHTML = '';
-  const chipDefs = [
-    { key: 'search', label: () => `Search: "${filters.search}"`, clear: () => { document.getElementById('filterSearch').value = ''; } },
-    { key: 'max_drive_time', label: () => `Within ${filters.max_drive_time} min`, clear: () => { document.getElementById('filterDistance').value = ''; } },
-    { key: 'municipality', label: () => filters.municipality, clear: () => { document.getElementById('filterMunicipality').value = ''; } },
-    { key: 'date_from', label: () => `From: ${filters.date_from}`, clear: () => { document.getElementById('filterDateFrom').value = ''; } },
-    { key: 'date_to', label: () => `To: ${filters.date_to}`, clear: () => { document.getElementById('filterDateTo').value = ''; } },
-    { key: 'min_value', label: () => `Min: $${Number(filters.min_value).toLocaleString()}`, clear: () => { document.getElementById('filterMinValue').value = ''; } },
-    { key: 'max_value', label: () => `Max: $${Number(filters.max_value).toLocaleString()}`, clear: () => { document.getElementById('filterMaxValue').value = ''; } },
-    { key: 'inspection_status', label: () => `Status: ${filters.inspection_status}`, clear: () => { document.getElementById('filterStatus').value = ''; } },
+  const c=document.getElementById('filterChips'); c.innerHTML='';
+  const defs=[
+    {key:'search',label:()=>`"${filters.search}"`,clear:()=>{document.getElementById('filterSearch').value='';}},
+    {key:'max_drive_time',label:()=>`${filters.max_drive_time} min`,clear:()=>{document.getElementById('filterDistance').value='';}},
+    {key:'municipality',label:()=>filters.municipality,clear:()=>{document.getElementById('filterMunicipality').value='';}},
+    {key:'date_from',label:()=>`From: ${filters.date_from}`,clear:()=>{document.getElementById('filterDateFrom').value='';}},
+    {key:'date_to',label:()=>`To: ${filters.date_to}`,clear:()=>{document.getElementById('filterDateTo').value='';}},
+    {key:'min_value',label:()=>`Min: $${Number(filters.min_value).toLocaleString()}`,clear:()=>{document.getElementById('filterMinValue').value='';}},
+    {key:'max_value',label:()=>`Max: $${Number(filters.max_value).toLocaleString()}`,clear:()=>{document.getElementById('filterMaxValue').value='';}},
+    {key:'inspection_status',label:()=>`${filters.inspection_status}`,clear:()=>{document.getElementById('filterStatus').value='';}},
   ];
-
-  let hasActive = false;
-  for (const def of chipDefs) {
-    if (!filters[def.key]) continue;
-    hasActive = true;
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.innerHTML = `${esc(def.label())} <button onclick="clearFilter('${def.key}')" title="Remove">&times;</button>`;
-    chip._clear = def.clear;
-    chip.dataset.key = def.key;
-    container.appendChild(chip);
-  }
-  container.classList.toggle('hidden', !hasActive);
+  let has=false;
+  for(const d of defs){if(!filters[d.key])continue;has=true;const ch=document.createElement('span');ch.className='chip';ch.innerHTML=`${esc(d.label())} <button onclick="clearFilter('${d.key}')">&times;</button>`;ch._clear=d.clear;ch.dataset.key=d.key;c.appendChild(ch);}
+  c.classList.toggle('hidden',!has);
 }
+function clearFilter(k){const c=document.getElementById('filterChips');const ch=c.querySelector(`[data-key="${k}"]`);if(ch&&ch._clear)ch._clear();updateFilters();}
+function resetFilters(){document.getElementById('filterSearch').value='';document.getElementById('filterDistance').value='';document.getElementById('filterMunicipality').value='';document.getElementById('filterDateFrom').value='';document.getElementById('filterDateTo').value='';document.getElementById('filterMinValue').value='';document.getElementById('filterMaxValue').value='';document.getElementById('filterStatus').value='';currentPage=1;currentSort={column:'opportunity_score',order:'desc'};updateFilters();loadStats();}
 
-function clearFilter(key) {
-  const container = document.getElementById('filterChips');
-  const chip = container.querySelector(`[data-key="${key}"]`);
-  if (chip && chip._clear) chip._clear();
-  updateFilters();
-}
+function buildQueryParams(){const p=new URLSearchParams();if(filters.search)p.set('search',filters.search);if(filters.max_drive_time)p.set('max_drive_time',filters.max_drive_time);if(filters.municipality)p.set('municipality',filters.municipality);if(filters.date_from)p.set('date_from',filters.date_from);if(filters.date_to)p.set('date_to',filters.date_to);if(filters.min_value)p.set('min_value',filters.min_value);if(filters.max_value)p.set('max_value',filters.max_value);if(filters.inspection_status)p.set('inspection_status',filters.inspection_status);return p;}
 
-function resetFilters() {
-  document.getElementById('filterSearch').value = '';
-  document.getElementById('filterDistance').value = '';
-  document.getElementById('filterMunicipality').value = '';
-  document.getElementById('filterDateFrom').value = '';
-  document.getElementById('filterDateTo').value = '';
-  document.getElementById('filterMinValue').value = '';
-  document.getElementById('filterMaxValue').value = '';
-  document.getElementById('filterStatus').value = '';
-  currentPage = 1;
-  currentSort = { column: 'opportunity_score', order: 'desc' };
-  updateFilters();
-  loadStats();
-}
+async function loadPermits(){readFiltersFromUI();const p=buildQueryParams();p.set('sort_by',currentSort.column);p.set('sort_order',currentSort.order);p.set('page',currentPage);p.set('per_page',50);try{const r=await(await fetch(`/api/permits?${p}`)).json();renderTable(r.data);renderPagination(r.pagination);}catch(e){console.error(e);}}
 
-// ── Build Query Params ────
-function buildQueryParams() {
-  const p = new URLSearchParams();
-  if (filters.search) p.set('search', filters.search);
-  if (filters.max_drive_time) p.set('max_drive_time', filters.max_drive_time);
-  if (filters.municipality) p.set('municipality', filters.municipality);
-  if (filters.date_from) p.set('date_from', filters.date_from);
-  if (filters.date_to) p.set('date_to', filters.date_to);
-  if (filters.min_value) p.set('min_value', filters.min_value);
-  if (filters.max_value) p.set('max_value', filters.max_value);
-  if (filters.inspection_status) p.set('inspection_status', filters.inspection_status);
-  return p;
-}
+async function loadStats(){try{const s=await(await fetch('/api/stats')).json();document.getElementById('statTotal').textContent=(s.total_permits||0).toLocaleString();document.getElementById('statAvgValue').textContent=fmtCurrency(s.avg_value);if(s.earliest_date&&s.latest_date)document.getElementById('statDateRange').textContent=`${fmtDateShort(s.earliest_date)} - ${fmtDateShort(s.latest_date)}`;if(s.last_run){document.getElementById('lastScrapedInfo').classList.remove('hidden');document.getElementById('lastScrapedTime').textContent=new Date((s.last_run.completed_at||s.last_run.started_at)+'Z').toLocaleString();}try{const hv=await(await fetch('/api/permits?min_value=300000&per_page=1')).json();document.getElementById('statHighValue').textContent=(hv.pagination?.total||0).toLocaleString();}catch(e){}}catch(e){console.error(e);}}
 
-// ── Data Loading ────
-async function loadPermits() {
-  readFiltersFromUI();
-  const p = buildQueryParams();
-  p.set('sort_by', currentSort.column); p.set('sort_order', currentSort.order);
-  p.set('page', currentPage); p.set('per_page', 50);
-  try {
-    const r = await (await fetch(`/api/permits?${p}`)).json();
-    renderTable(r.data); renderPagination(r.pagination);
-  } catch (e) { console.error(e); }
-}
-
-async function loadStats() {
-  try {
-    const s = await (await fetch('/api/stats')).json();
-    document.getElementById('statTotal').textContent = (s.total_permits||0).toLocaleString();
-    document.getElementById('statAvgValue').textContent = fmtCurrency(s.avg_value);
-    if (s.earliest_date && s.latest_date) document.getElementById('statDateRange').textContent = `${fmtDateShort(s.earliest_date)} - ${fmtDateShort(s.latest_date)}`;
-    if (s.last_run) { document.getElementById('lastScrapedInfo').classList.remove('hidden'); document.getElementById('lastScrapedTime').textContent = new Date((s.last_run.completed_at||s.last_run.started_at)+'Z').toLocaleString(); }
-    try {
-      const hv = await (await fetch('/api/permits?min_value=300000&per_page=1')).json();
-      document.getElementById('statHighValue').textContent = (hv.pagination?.total||0).toLocaleString();
-    } catch(e) {}
-  } catch (e) { console.error(e); }
-}
-
-// ── Builder Lookup ────
-async function lookupBuilder(permitId, btn) {
-  btn.disabled = true;
-  btn.textContent = 'Searching...';
-  btn.classList.add('opacity-50');
-  try {
-    const resp = await fetch(`/api/permits/${permitId}/lookup-builder`, { method: 'POST' });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Lookup failed'); return; }
-
-    // Update the row inline
-    const phoneCell = document.getElementById(`phone-${permitId}`);
-    const emailCell = document.getElementById(`email-${permitId}`);
-    const websiteCell = document.getElementById(`website-${permitId}`);
-
-    if (data.phone && phoneCell) phoneCell.innerHTML = phone(data.phone);
-    if (data.email && emailCell) emailCell.innerHTML = email(data.email);
-    if (data.website && websiteCell) {
-      const host = new URL(data.website).hostname.replace(/^www\./, '');
-      websiteCell.innerHTML = `<a href="${esc(data.website)}" target="_blank" class="text-blue-600 hover:underline text-xs" onclick="event.stopPropagation()">${esc(host)}</a>`;
-    }
-
-    if (data.phone || data.email || data.website) {
-      btn.textContent = 'Found!';
-      btn.classList.replace('bg-purple-100', 'bg-green-100');
-      btn.classList.replace('text-purple-700', 'text-green-700');
-    } else {
-      btn.textContent = 'Not found';
-      btn.classList.replace('bg-purple-100', 'bg-gray-100');
-      btn.classList.replace('text-purple-700', 'text-gray-500');
-    }
-  } catch (err) {
-    console.error(err);
-    btn.textContent = 'Error';
-  }
-}
+// ── Builder Lookup (single) ────
+async function lookupBuilder(permitId,btn){btn.disabled=true;btn.textContent='Searching...';btn.style.opacity='0.5';try{const resp=await fetch(`/api/permits/${permitId}/lookup-builder`,{method:'POST'});const data=await resp.json();if(!resp.ok){alert(data.error||'Lookup failed');return;}const phoneCell=document.getElementById(`phone-${permitId}`);const emailCell=document.getElementById(`email-${permitId}`);const websiteCell=document.getElementById(`website-${permitId}`);if(data.phone&&phoneCell)phoneCell.innerHTML=phone(data.phone);if(data.email&&emailCell)emailCell.innerHTML=email(data.email);if(data.website&&websiteCell){const host=new URL(data.website).hostname.replace(/^www\./,'');websiteCell.innerHTML=`<a href="${esc(data.website)}" target="_blank" onclick="event.stopPropagation()">${esc(host)}</a>`;}if(data.phone||data.email||data.website){btn.textContent='Found!';btn.style.background='rgba(34,197,94,0.15)';btn.style.color='#4ADE80';}else{btn.textContent='Not found';btn.style.opacity='0.4';}}catch(err){console.error(err);btn.textContent='Error';}}
 
 // ── Table ────
-function renderTable(permits) {
-  const tbody = document.getElementById('permitsTableBody');
-  if (!permits||!permits.length) {
-    tbody.innerHTML = `<tr><td colspan="14" class="px-6 py-12 text-center text-gray-400"><div class="text-4xl mb-2">&#x1f4ed;</div><div class="text-lg font-medium">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = '';
-  permits.forEach(p => {
-    const isHighValue = p.project_value && p.project_value >= 300000;
-    const tr = document.createElement('tr');
-    tr.className = `table-row cursor-pointer border-b border-gray-100${isHighValue ? ' high-value' : ''}`;
-    tr.onclick = () => { const d=document.getElementById(`d-${p.id}`); if(d) d.classList.toggle('open'); };
+function renderTable(permits){
+  const tbody=document.getElementById('permitsTableBody');
+  if(!permits||!permits.length){tbody.innerHTML=`<tr><td colspan="14" class="px-6 py-16 text-center" style="color:var(--text-dim)"><svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><path d="M20 12H4M12 4v16"/></svg><div class="text-base font-medium" style="color:var(--text)">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;return;}
+  tbody.innerHTML='';
+  permits.forEach(p=>{
+    const isHV=p.project_value&&p.project_value>=300000;
+    const tr=document.createElement('tr');
+    tr.className=`cursor-pointer${isHV?' high-value':''}`;
+    tr.onclick=()=>{const d=document.getElementById(`d-${p.id}`);if(d)d.classList.toggle('open');};
 
-    let detailLink = '';
-    try {
-      const raw = typeof p.raw_data === 'string' ? JSON.parse(p.raw_data) : p.raw_data;
-      const caseId = raw?.CaseId || raw?.Id || raw?.InspectionId;
-      if (caseId) {
-        const detailUrl = raw?._detailUrl || `${ENERGOV_BASE}#/inspectionDetail/inspection/${caseId}`;
-        detailLink = `<a href="${esc(detailUrl)}" target="_blank" class="text-blue-600 hover:underline text-xs" onclick="event.stopPropagation()">View</a>`;
-      }
-    } catch(e) {}
+    let detailLink='';
+    try{const raw=typeof p.raw_data==='string'?JSON.parse(p.raw_data):p.raw_data;const caseId=raw?.CaseId||raw?.Id||raw?.InspectionId;if(caseId){const detailUrl=raw?._detailUrl||`${ENERGOV_BASE}#/inspectionDetail/inspection/${caseId}`;detailLink=`<a href="${esc(detailUrl)}" target="_blank" onclick="event.stopPropagation()" style="font-family:'Fira Code',monospace;font-size:.65rem">View</a>`;}}catch(e){}
 
-    let builderDisplay = '';
-    if (p.builder_name && p.builder_company) {
-      builderDisplay = `<div class="font-medium text-gray-900">${esc(p.builder_name)}</div><div class="text-xs text-gray-500">${esc(p.builder_company)}</div>`;
-    } else if (p.builder_name || p.builder_company) {
-      builderDisplay = `<span class="font-medium text-gray-900">${esc(p.builder_name || p.builder_company)}</span>`;
-    } else {
-      builderDisplay = '<span class="empty-cell">&mdash;</span>';
-    }
+    let bd='';
+    if(p.builder_name&&p.builder_company)bd=`<div class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(p.builder_company)}</div>`;
+    else if(p.builder_name||p.builder_company)bd=`<span class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name||p.builder_company)}</span>`;
+    else bd='<span class="empty-cell">&mdash;</span>';
 
-    tr.innerHTML = `
-      <td class="px-3 py-2 font-medium text-gray-900 max-w-xs truncate" title="${esc(p.address)}">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2 text-gray-600 text-xs">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2">${builderDisplay}</td>
-      <td class="px-3 py-2" id="phone-${p.id}">${phone(p.builder_phone)}</td>
-      <td class="px-3 py-2" id="email-${p.id}">${email(p.builder_email)}</td>
-      <td class="px-3 py-2 text-gray-400 text-xs" id="pphone-${p.id}">${phone(p.personal_phone)}</td>
-      <td class="px-3 py-2 text-gray-400 text-xs" id="pemail-${p.id}">${email(p.personal_email)}</td>
-      <td class="px-3 py-2 text-gray-700">${esc(p.owner_name)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2 text-right font-medium${isHighValue ? ' text-amber-600' : ''}">${p.project_value?fmtCurrency(p.project_value):'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2 text-gray-700">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2">${statusBadge(p.inspection_status)}</td>
-      <td class="px-3 py-2 text-center">${scoreBadge(p.opportunity_score)}</td>
-      <td class="px-3 py-2 text-gray-500 font-mono text-xs">${esc(p.permit_number)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td class="px-3 py-2">${detailLink||'<span class="empty-cell">&mdash;</span>'}</td>`;
+    tr.innerHTML=`
+      <td class="font-medium" style="color:var(--text-bright);max-width:200px" title="${esc(p.address)}"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div></td>
+      <td style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td>${bd}</td>
+      <td id="phone-${p.id}">${phone(p.builder_phone)}</td>
+      <td id="email-${p.id}">${email(p.builder_email)}</td>
+      <td id="pphone-${p.id}" style="color:var(--text-dim)">${phone(p.personal_phone)}</td>
+      <td id="pemail-${p.id}" style="color:var(--text-dim)">${email(p.personal_email)}</td>
+      <td style="color:var(--text)">${esc(p.owner_name)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td style="text-align:right;font-family:'Fira Code',monospace;font-size:.75rem;${isHV?'color:var(--blue)':''}">${p.project_value?fmtCurrency(p.project_value):'<span class="empty-cell">&mdash;</span>'}</td>
+      <td style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td>${statusBadge(p.inspection_status)}</td>
+      <td style="text-align:center">${scoreBadge(p.opportunity_score)}</td>
+      <td style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dim)">${esc(p.permit_number)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td>${detailLink||'<span class="empty-cell">&mdash;</span>'}</td>`;
     tbody.appendChild(tr);
 
-    // Expandable detail row
-    let subsHtml = '&mdash;';
-    let linkedPermitHtml = '&mdash;';
-    let dataSourceHtml = '';
-    try {
-      const raw = typeof p.raw_data === 'string' ? JSON.parse(p.raw_data) : p.raw_data;
-      const subs = raw?._contractors || [];
-      if (subs.length) subsHtml = subs.map(c => esc(c.name) + (c.company ? ` <span class="text-gray-400">(${esc(c.company)})</span>` : '')).join(', ');
-      const allC = raw?._allContacts || [];
-      if (allC.length) subsHtml = allC.map(c => `<span class="font-medium">${esc(c.name||'?')}</span> <span class="text-gray-400">[${esc(c.type)}]</span>${c.company ? ` @ ${esc(c.company)}` : ''}`).join('<br>');
-      if (raw?._linkedPermit) {
-        const lpUrl = raw._linkedPermitUrl;
-        linkedPermitHtml = lpUrl
-          ? `<a href="${esc(lpUrl)}" target="_blank" class="text-blue-600 hover:underline" onclick="event.stopPropagation()">${esc(raw._linkedPermit)}</a>`
-          : esc(raw._linkedPermit);
-      }
-      if (raw?._dataSource) {
-        const src = raw._dataSource === 'building_permit' ? 'Building Permit' : 'Inspection Contacts';
-        dataSourceHtml = `<span class="badge ${raw._dataSource === 'building_permit' ? 'badge-green' : 'badge-blue'}">${src}</span>`;
-      }
-    } catch(e) {}
+    // Expandable detail
+    let subsHtml='&mdash;',linkedPermitHtml='&mdash;',dataSourceHtml='';
+    try{const raw=typeof p.raw_data==='string'?JSON.parse(p.raw_data):p.raw_data;const subs=raw?._contractors||[];if(subs.length)subsHtml=subs.map(c=>esc(c.name)+(c.company?` <span style="color:var(--text-dim)">(${esc(c.company)})</span>`:'')).join(', ');const allC=raw?._allContacts||[];if(allC.length)subsHtml=allC.map(c=>`<span class="font-medium">${esc(c.name||'?')}</span> <span style="color:var(--text-dim)">[${esc(c.type)}]</span>${c.company?' @ '+esc(c.company):''}`).join('<br>');if(raw?._linkedPermit){const lpUrl=raw._linkedPermitUrl;linkedPermitHtml=lpUrl?`<a href="${esc(lpUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(raw._linkedPermit)}</a>`:esc(raw._linkedPermit);}if(raw?._dataSource){const src=raw._dataSource==='building_permit'?'Building Permit':'Inspection Contacts';dataSourceHtml=`<span class="badge ${raw._dataSource==='building_permit'?'badge-green':'badge-blue'}">${src}</span>`;}}catch(e){}
 
-    const dr = document.createElement('tr'); dr.id=`d-${p.id}`; dr.className='detail-row bg-blue-50';
-    dr.innerHTML = `<td colspan="14" class="px-6 py-4"><div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-      <div><span class="text-gray-500 text-xs block">Permit #</span><span class="font-medium">${esc(p.permit_number)||'&mdash;'}</span></div>
-      <div><span class="text-gray-500 text-xs block">Linked Building Permit</span><span class="font-medium">${linkedPermitHtml}</span></div>
-      <div><span class="text-gray-500 text-xs block">Opportunity Score</span><span class="font-medium">${scoreBadge(p.opportunity_score)} ${dataSourceHtml}</span></div>
-      <div><span class="text-gray-500 text-xs block">Inspection Type</span><span class="font-medium">${esc(p.inspection_type)||'&mdash;'}</span></div>
-      <div><span class="text-gray-500 text-xs block">Builder (Applicant)</span><span class="font-medium">${esc(p.builder_name)||esc(p.applicant_name)||'&mdash;'}${p.builder_company ? ' @ '+esc(p.builder_company) : ''}</span></div>
-      <div><span class="text-gray-500 text-xs block">Owner</span><span class="font-medium">${esc(p.owner_name)||'&mdash;'}</span></div>
-      <div class="md:col-span-2"><span class="text-gray-500 text-xs block">All Contacts</span><span class="font-medium text-xs leading-relaxed">${subsHtml}</span></div>
-      <div><span class="text-gray-500 text-xs block">Issue Date</span><span class="font-medium">${fmtDateShort(p.permit_issue_date)||'&mdash;'}</span></div>
-      <div><span class="text-gray-500 text-xs block">Scraped</span><span class="font-medium">${p.scraped_at?new Date(p.scraped_at+'Z').toLocaleString():'&mdash;'}</span></div>
-      <div><span class="text-gray-500 text-xs block">Website</span><span class="font-medium" id="website-${p.id}">${p.builder_website ? `<a href="${esc(p.builder_website)}" target="_blank" class="text-blue-600 hover:underline text-xs" onclick="event.stopPropagation()">${esc((() => { try { return new URL(p.builder_website).hostname.replace(/^www\\./, ''); } catch { return p.builder_website; } })())}</a>` : '&mdash;'}</span></div>
-      <div><span class="text-gray-500 text-xs block">Builder Lookup</span>${(p.builder_company || p.builder_name) ? `<button onclick="event.stopPropagation(); lookupBuilder(${p.id}, this)" class="mt-1 px-3 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors">Lookup Contact Info</button>` : '<span class="text-gray-400 text-xs">No builder info</span>'}</div>
+    const dr=document.createElement('tr');dr.id=`d-${p.id}`;dr.className='detail-row';
+    dr.innerHTML=`<td colspan="14" style="padding:16px 24px;background:rgba(43,108,176,0.03)"><div class="grid grid-cols-2 md:grid-cols-4 gap-4" style="font-size:.8rem">
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Permit #</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.75rem">${esc(p.permit_number)||'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Linked Building Permit</span><span class="font-medium">${linkedPermitHtml}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Opportunity Score</span><span class="font-medium">${scoreBadge(p.opportunity_score)} ${dataSourceHtml}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Inspection Type</span><span class="font-medium">${esc(p.inspection_type)||'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Builder</span><span class="font-medium">${esc(p.builder_name)||esc(p.applicant_name)||'&mdash;'}${p.builder_company?' @ '+esc(p.builder_company):''}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Owner</span><span class="font-medium">${esc(p.owner_name)||'&mdash;'}</span></div>
+      <div class="md:col-span-2"><span style="color:var(--text-dim);font-size:.65rem;display:block">All Contacts</span><span class="font-medium" style="font-size:.75rem;line-height:1.6">${subsHtml}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Issue Date</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.75rem">${fmtDateShort(p.permit_issue_date)||'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Scraped</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.7rem">${p.scraped_at?new Date(p.scraped_at+'Z').toLocaleString():'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Website</span><span class="font-medium" id="website-${p.id}">${p.builder_website?`<a href="${esc(p.builder_website)}" target="_blank" onclick="event.stopPropagation()">${esc((()=>{try{return new URL(p.builder_website).hostname.replace(/^www\\./, '');}catch{return p.builder_website;}})())}</a>`:'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Builder Lookup</span>${(p.builder_company||p.builder_name)?`<button onclick="event.stopPropagation();lookupBuilder(${p.id},this)" style="margin-top:4px;padding:4px 14px;font-size:.7rem;font-weight:600;border-radius:9999px;background:rgba(43,108,176,0.1);color:#93C5FD;border:1px solid rgba(249,115,22,0.2);cursor:pointer;transition:all 0.2s">Lookup Contact Info</button>`:'<span style="color:var(--text-dim);font-size:.7rem">No builder info</span>'}</div>
     </div></td>`;
     tbody.appendChild(dr);
   });
 }
 
 // ── Pagination ────
-function renderPagination(pg) {
-  const c=document.getElementById('pagination'), info=document.getElementById('paginationInfo'), btns=document.getElementById('paginationButtons');
-  if (!pg||pg.total===0) { c.classList.add('hidden'); return; }
-  c.classList.remove('hidden');
-  const s=(pg.page-1)*pg.per_page+1, e=Math.min(pg.page*pg.per_page,pg.total);
-  info.textContent=`${s}-${e} of ${pg.total}`;
-  btns.innerHTML='';
-  if (pg.page>1) btns.innerHTML+=`<button onclick="goPage(${pg.page-1})" class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">&laquo;</button>`;
-  if (pg.page<pg.total_pages) btns.innerHTML+=`<button onclick="goPage(${pg.page+1})" class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">&raquo;</button>`;
-}
-function goPage(p) { currentPage=p; loadPermits(); }
+function renderPagination(pg){const c=document.getElementById('pagination'),info=document.getElementById('paginationInfo'),btns=document.getElementById('paginationButtons');if(!pg||pg.total===0){c.classList.add('hidden');return;}c.classList.remove('hidden');const s=(pg.page-1)*pg.per_page+1,e=Math.min(pg.page*pg.per_page,pg.total);info.textContent=`${s}-${e} of ${pg.total}`;btns.innerHTML='';if(pg.page>1)btns.innerHTML+=`<button onclick="goPage(${pg.page-1})" class="btn-glass" style="padding:4px 12px;font-size:.75rem">&laquo;</button>`;if(pg.page<pg.total_pages)btns.innerHTML+=`<button onclick="goPage(${pg.page+1})" class="btn-glass" style="padding:4px 12px;font-size:.75rem">&raquo;</button>`;}
+function goPage(p){currentPage=p;loadPermits();}
 
 // ── Sort ────
-function sortBy(col) {
-  document.querySelectorAll('.sort-arrow').forEach(e=>{e.classList.remove('active');e.innerHTML='&#x25B2;';});
-  if (currentSort.column===col) currentSort.order=currentSort.order==='asc'?'desc':'asc';
-  else { currentSort.column=col; currentSort.order='desc'; }
-  const a=document.getElementById(`sort-${col}`);
-  if(a){a.classList.add('active');a.innerHTML=currentSort.order==='asc'?'&#x25B2;':'&#x25BC;';}
-  currentPage=1; loadPermits();
-}
+function sortBy(col){document.querySelectorAll('.sort-arrow').forEach(e=>{e.classList.remove('active');e.innerHTML='&#x25B2;';});if(currentSort.column===col)currentSort.order=currentSort.order==='asc'?'desc':'asc';else{currentSort.column=col;currentSort.order='desc';}const a=document.getElementById(`sort-${col}`);if(a){a.classList.add('active');a.innerHTML=currentSort.order==='asc'?'&#x25B2;':'&#x25BC;';}currentPage=1;loadPermits();}
 
 // ── Scraper ────
-async function startScrape() {
-  const btn=document.getElementById('btnScrape');
-  btn.disabled=true; btn.classList.add('opacity-50');
-  document.getElementById('scrapeIcon').innerHTML='<svg class="spinner w-4 h-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
-  document.getElementById('scrapeText').textContent='Scraping...';
-  document.getElementById('scrapeProgress').classList.remove('hidden');
-  try { await fetch('/api/scrape',{method:'POST'}); scrapeCheckInterval=setInterval(checkScrapeStatus,2000); }
-  catch(e) { resetScrapeBtn(); }
-}
+async function startScrape(){const btn=document.getElementById('btnScrape');btn.disabled=true;btn.style.opacity='0.5';document.getElementById('scrapeIcon').innerHTML='<svg class="spinner" width="16" height="16" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';document.getElementById('scrapeText').textContent='Scraping...';document.getElementById('scrapeProgress').classList.remove('hidden');try{await fetch('/api/scrape',{method:'POST'});scrapeCheckInterval=setInterval(checkScrapeStatus,2000);}catch(e){resetScrapeBtn();}}
 
-async function checkScrapeStatus() {
-  try {
-    const s=await(await fetch('/api/scrape/status')).json();
-    document.getElementById('scrapeStatusText').textContent=s.running?`Scraping: ${s.current_municipality||'...'}` :'Scrape complete!';
-    document.getElementById('scrapeDetailText').textContent=s.running?`${s.municipalities_succeeded||0}/${s.municipalities_attempted||0} municipalities`:`${s.permits_found||0} permits (${s.permits_new||0} new)`;
-    document.getElementById('scrapeCountText').textContent=`${s.permits_found||0} found`;
-    if (!s.running) {
-      clearInterval(scrapeCheckInterval);
-      setTimeout(()=>{
-        document.getElementById('scrapeProgress').classList.add('hidden');resetScrapeBtn();loadFilterOptions();loadPermits();loadStats();
-        // Auto-trigger builder lookup status polling (scrape auto-starts it)
-        const lb=document.getElementById('btnLookup');lb.disabled=true;lb.classList.add('opacity-50');
-        document.getElementById('lookupIcon').innerHTML='<svg class="spinner w-4 h-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
-        document.getElementById('lookupText').textContent='Looking up builders...';
-        lookupCheckInterval=setInterval(checkLookupStatus,3000);
-      },2000);
-    }
-  } catch(e){}
-}
-function resetScrapeBtn() { const b=document.getElementById('btnScrape');b.disabled=false;b.classList.remove('opacity-50');document.getElementById('scrapeIcon').innerHTML='&#x1f504;';document.getElementById('scrapeText').textContent='Run Scraper'; }
+async function checkScrapeStatus(){try{const s=await(await fetch('/api/scrape/status')).json();document.getElementById('scrapeStatusText').textContent=s.running?`Scraping: ${s.current_municipality||'...'}`:'Scrape complete!';document.getElementById('scrapeDetailText').textContent=s.running?`${s.municipalities_succeeded||0}/${s.municipalities_attempted||0} municipalities`:`${s.permits_found||0} permits (${s.permits_new||0} new)`;document.getElementById('scrapeCountText').textContent=`${s.permits_found||0} found`;if(!s.running){clearInterval(scrapeCheckInterval);setTimeout(()=>{document.getElementById('scrapeProgress').classList.add('hidden');resetScrapeBtn();loadFilterOptions();loadPermits();loadStats();},2000);}}catch(e){}}
+function resetScrapeBtn(){const b=document.getElementById('btnScrape');b.disabled=false;b.style.opacity='1';document.getElementById('scrapeIcon').innerHTML='<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';document.getElementById('scrapeText').textContent='Run Scraper';}
 
-// ── Builder Lookup ────
+// ── Builder Lookup (bulk) ────
 let lookupCheckInterval;
-async function startBuilderLookup() {
-  const btn=document.getElementById('btnLookup');
-  btn.disabled=true; btn.classList.add('opacity-50');
-  document.getElementById('lookupIcon').innerHTML='<svg class="spinner w-4 h-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
-  document.getElementById('lookupText').textContent='Looking up...';
-  try { await fetch('/api/builder-lookup/run',{method:'POST'}); lookupCheckInterval=setInterval(checkLookupStatus,3000); }
-  catch(e) { resetLookupBtn(); }
-}
+async function startBuilderLookup(){const btn=document.getElementById('btnLookup');btn.disabled=true;btn.style.opacity='0.5';document.getElementById('lookupIcon').innerHTML='<svg class="spinner" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';document.getElementById('lookupText').textContent='Looking up...';try{await fetch('/api/builder-lookup/run',{method:'POST'});lookupCheckInterval=setInterval(checkLookupStatus,3000);}catch(e){resetLookupBtn();}}
+async function checkLookupStatus(){try{const s=await(await fetch('/api/builder-lookup/status')).json();if(s.running){document.getElementById('lookupText').textContent=`${s.processed||0}/${s.total||0} builders`;}else{clearInterval(lookupCheckInterval);document.getElementById('lookupText').textContent=s.found!=null?`Done! ${s.found} found`:'Done!';setTimeout(()=>{resetLookupBtn();loadPermits();},3000);}}catch(e){}}
+function resetLookupBtn(){const b=document.getElementById('btnLookup');b.disabled=false;b.style.opacity='1';document.getElementById('lookupIcon').innerHTML='<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>';document.getElementById('lookupText').textContent='Lookup Builders';}
 
-async function checkLookupStatus() {
-  try {
-    const s=await(await fetch('/api/builder-lookup/status')).json();
-    if (s.running) {
-      document.getElementById('lookupText').textContent=`${s.processed||0}/${s.total||0} builders`;
-    } else {
-      clearInterval(lookupCheckInterval);
-      document.getElementById('lookupText').textContent=s.found!=null?`Done! ${s.found} found`:'Done!';
-      setTimeout(()=>{resetLookupBtn();loadPermits();},3000);
-    }
-  } catch(e){}
+// ── Auto-Schedule ────
+async function loadScheduleStatus(){
+  try{
+    const s=await(await fetch('/api/schedule')).json();
+    updateScheduleBtn(s.enabled);
+  }catch(e){}
 }
-
-function resetLookupBtn() { const b=document.getElementById('btnLookup');b.disabled=false;b.classList.remove('opacity-50');document.getElementById('lookupIcon').innerHTML='&#x1f50d;';document.getElementById('lookupText').textContent='Lookup Builders'; }
+function updateScheduleBtn(enabled){
+  const btn=document.getElementById('btnSchedule');
+  const txt=document.getElementById('scheduleText');
+  txt.textContent=enabled?'Auto: ON':'Auto: OFF';
+  btn.style.borderColor=enabled?'rgba(43,108,176,0.5)':'rgba(107,123,141,0.3)';
+  btn.title=enabled?'Auto-scrape ON — runs at 7am, 1pm, 6pm EST. Click to disable.':'Auto-scrape OFF. Click to enable.';
+}
+async function toggleSchedule(){
+  try{
+    const s=await(await fetch('/api/schedule/toggle',{method:'POST'})).json();
+    updateScheduleBtn(s.enabled);
+  }catch(e){}
+}
 
 // ── Export ────
-function exportCSV() {
-  readFiltersFromUI();
-  const p = buildQueryParams();
-  window.location.href=`/api/export/csv?${p}`;
-}
+function exportCSV(){readFiltersFromUI();const p=buildQueryParams();window.location.href=`/api/export/csv?${p}`;}
 
 // ── Helpers ────
 function esc(s){if(s==null)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 function fmtCurrency(v){if(v==null)return'&mdash;';return '$'+Math.round(Number(v)).toLocaleString();}
 function fmtDateShort(s){if(!s)return'';try{return new Date(s+(s.includes('T')?'':'T00:00:00')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch{return s;}}
-function phone(p){if(!p)return'<span class="empty-cell">&mdash;</span>';return`<a href="tel:${esc(p)}" class="text-blue-600 hover:underline whitespace-nowrap font-medium">${esc(p)}</a>`;}
-function email(e){if(!e)return'<span class="empty-cell">&mdash;</span>';return`<a href="mailto:${esc(e)}" class="text-blue-600 hover:underline text-xs">${esc(e)}</a>`;}
+function phone(p){if(!p)return'<span class="empty-cell">&mdash;</span>';return`<a href="tel:${esc(p)}" style="white-space:nowrap;font-family:'Fira Code',monospace;font-size:.7rem">${esc(p)}</a>`;}
+function email(e){if(!e)return'<span class="empty-cell">&mdash;</span>';return`<a href="mailto:${esc(e)}" style="font-size:.7rem">${esc(e)}</a>`;}
 function statusBadge(s){if(!s)return'<span class="empty-cell">&mdash;</span>';const l=s.toLowerCase();if(l.includes('pass')||l.includes('approved'))return`<span class="badge badge-green">${esc(s)}</span>`;if(l.includes('pending')||l.includes('scheduled'))return`<span class="badge badge-yellow">${esc(s)}</span>`;return`<span class="badge badge-gray">${esc(s)}</span>`;}
 function scoreBadge(score){if(score==null||score===undefined)return'<span class="badge badge-gray">--</span>';const s=Number(score);if(s>=70)return`<span class="badge badge-green">${s}</span>`;if(s>=40)return`<span class="badge badge-yellow">${s}</span>`;if(s>=1)return`<span class="badge badge-red">${s}</span>`;return`<span class="badge badge-gray">${s}</span>`;}
 
-// ── FOIA Panel ────
-let foiaOpen = true;
-async function loadFoiaMunicipalities() {
-  try {
-    const data = await (await fetch('/api/foia/municipalities')).json();
-    if (!data.length) return;
-    document.getElementById('foiaPanel').classList.remove('hidden');
-    const list = document.getElementById('foiaList');
-    list.innerHTML = '';
-    data.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-200';
-      if (m.foiaType === 'email') {
-        div.innerHTML = `<div><div class="text-sm font-medium text-gray-800">${esc(m.name)}</div><div class="text-xs text-gray-500">${esc(m.email)}</div></div><a href="${esc(m.mailtoUrl)}" class="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">&#x2709; Send Request</a>`;
-      } else {
-        div.innerHTML = `<div><div class="text-sm font-medium text-gray-800">${esc(m.name)}</div><div class="text-xs text-gray-500">NextRequest Portal</div></div><a href="${esc(m.portalUrl)}" target="_blank" class="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap">&#x1f517; Open Portal</a>`;
-      }
-      list.appendChild(div);
-    });
-  } catch (e) { console.error('Failed to load FOIA municipalities:', e); }
-}
-function toggleFoiaPanel() {
-  foiaOpen = !foiaOpen;
-  document.getElementById('foiaBody').style.display = foiaOpen ? '' : 'none';
-  document.getElementById('foiaToggle').innerHTML = foiaOpen ? '&#x25BC;' : '&#x25B6;';
-}
+// ── FOIA ────
+let foiaOpen=true;
+let foiaBodyText='';
+async function loadFoiaMunicipalities(){try{const data=await(await fetch('/api/foia/municipalities')).json();if(!data.length)return;document.getElementById('foiaPanel').classList.remove('hidden');const list=document.getElementById('foiaList');list.innerHTML='';data.forEach(m=>{if(m.foiaBody)foiaBodyText=m.foiaBody;const div=document.createElement('div');div.className='glass-card';div.style='display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;gap:8px';if(m.foiaType==='email'){div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(m.email)}</div></div><a href="${esc(m.mailtoUrl)}" class="btn-primary" style="padding:6px 14px;font-size:.7rem;border-radius:8px;white-space:nowrap">Send Request</a>`;}else{const portalName=m.portalUrl.includes('nextrequest')?'NextRequest Portal':m.portalUrl.includes('justfoia')?'JustFOIA Portal':'FOIA Portal';div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${portalName}</div></div><div class="flex items-center gap-1"><button onclick="copyFoiaText(this)" class="btn-glass" style="padding:4px 8px;font-size:.6rem;border-radius:6px" title="Copy FOIA request text to clipboard">📋 Copy</button><a href="${esc(m.portalUrl)}" target="_blank" class="btn-glass" style="padding:6px 14px;font-size:.7rem;white-space:nowrap">Open Portal</a></div>`;}list.appendChild(div);});}catch(e){}}
+function copyFoiaText(btn){navigator.clipboard.writeText(foiaBodyText).then(()=>{btn.textContent='✓ Copied';btn.style.borderColor='rgba(34,197,94,0.4)';setTimeout(()=>{btn.textContent='📋 Copy';btn.style.borderColor='';},2000);});}
+function toggleFoiaPanel(){foiaOpen=!foiaOpen;document.getElementById('foiaBody').style.display=foiaOpen?'':'none';document.getElementById('foiaToggle').innerHTML=foiaOpen?'&#x25BC;':'&#x25B6;';}
 
-// ── Clear All Data (triple-click to confirm) ────
-let clearClickCount = 0;
-let clearTimer = null;
-const clearMessages = [
-  'Click 2 more times to delete ALL data',
-  'Click 1 more time to CONFIRM deletion',
-];
-function handleClearClick() {
-  clearClickCount++;
-  const btn = document.getElementById('btnClear');
-  if (clearClickCount < 3) {
-    btn.textContent = clearMessages[clearClickCount - 1];
-    btn.classList.add('bg-red-100', 'font-bold');
-    if (clearClickCount === 2) btn.classList.add('bg-red-200', 'text-red-800');
-    clearTimeout(clearTimer);
-    clearTimer = setTimeout(resetClearBtn, 3000);
-  } else {
-    btn.textContent = 'Clearing...';
-    btn.disabled = true;
-    clearTimeout(clearTimer);
-    fetch('/api/clear', { method: 'DELETE' })
-      .then(r => r.json())
-      .then(() => { resetClearBtn(); loadPermits(); loadStats(); loadFilterOptions(); })
-      .catch(() => resetClearBtn());
-  }
-}
-function resetClearBtn() {
-  clearClickCount = 0;
-  const btn = document.getElementById('btnClear');
-  btn.textContent = 'Clear All';
-  btn.disabled = false;
-  btn.className = 'px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg border border-red-200';
-}
+// ── Clear All (triple-click) ────
+let clearClickCount=0,clearTimer=null;
+const clearMessages=['Click 2 more times to delete ALL data','Click 1 more time to CONFIRM'];
+function handleClearClick(){clearClickCount++;const btn=document.getElementById('btnClear');if(clearClickCount<3){btn.textContent=clearMessages[clearClickCount-1];btn.style.background='rgba(239,68,68,0.2)';if(clearClickCount===2)btn.style.background='rgba(239,68,68,0.3)';clearTimeout(clearTimer);clearTimer=setTimeout(resetClearBtn,3000);}else{btn.textContent='Clearing...';btn.disabled=true;clearTimeout(clearTimer);fetch('/api/clear',{method:'DELETE'}).then(r=>r.json()).then(()=>{resetClearBtn();loadPermits();loadStats();loadFilterOptions();}).catch(()=>resetClearBtn());}}
+function resetClearBtn(){clearClickCount=0;const btn=document.getElementById('btnClear');btn.textContent='Clear All';btn.disabled=false;btn.style.background='';btn.className='btn-danger';}
 </script>
 </body>
 </html>

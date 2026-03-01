@@ -82,9 +82,109 @@ async function findCompanyWebsite(companyName) {
   }
 }
 
+// Junk email patterns to skip
+const JUNK_EMAIL_PATTERNS = [
+  'example.com', 'sentry.io', 'wixpress', 'wix.com', 'squarespace',
+  'wordpress.com', 'w3.org', 'schema.org', 'googleapis.com', 'gstatic.com',
+  'gravatar.com', 'cloudflare', '.png', '.jpg', '.svg', '.gif', '.webp',
+  'noreply', 'no-reply', 'mailer-daemon', 'postmaster@', 'user@domain',
+  'test@', 'admin@', 'webmaster@', 'hostmaster@', 'abuse@',
+];
+
+function isValidPhone(p) {
+  const cleaned = p.replace(/[^\d]/g, '');
+  if (cleaned.length !== 10 && !(cleaned.length === 11 && cleaned.startsWith('1'))) return false;
+  // Skip numbers that look fake (all same digit, sequential, etc.)
+  const d10 = cleaned.slice(-10);
+  if (/^(\d)\1{9}$/.test(d10)) return false; // all same digit
+  if (d10.startsWith('000') || d10.startsWith('111') || d10.startsWith('555')) return false;
+  return true;
+}
+
+function isValidEmail(e) {
+  const lower = e.toLowerCase();
+  if (JUNK_EMAIL_PATTERNS.some(p => lower.includes(p))) return false;
+  if (lower.length > 50) return false; // too long, likely concatenated junk
+  if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(lower)) return false;
+  // Reject emails with phone-like digit sequences in the local part
+  const local = lower.split('@')[0];
+  const digitsInLocal = local.replace(/[^\d]/g, '');
+  if (digitsInLocal.length >= 7) return false; // 7+ digits total = probably phone number junk
+  return true;
+}
+
 /**
- * Scrape a website for contact info (phone numbers and emails).
- * Checks the homepage and common contact page paths.
+ * Extract phones and emails from parsed HTML.
+ * Priority: tel:/mailto: links > footer/header/contact sections > visible body text.
+ */
+function extractContactFromHtml(html, $) {
+  const telPhones = new Set();   // from tel: links (highest confidence)
+  const mailtoEmails = new Set(); // from mailto: links (highest confidence)
+  const sectionPhones = new Set(); // from footer/header/contact text
+  const sectionEmails = new Set();
+
+  if ($) {
+    // 1. tel: links — highest confidence
+    $('a[href^="tel:"]').each((_, el) => {
+      const tel = $(el).attr('href').replace(/^tel:\s*/, '').replace(/\s/g, '');
+      if (isValidPhone(tel)) telPhones.add(tel);
+    });
+
+    // 2. mailto: links — highest confidence
+    $('a[href^="mailto:"]').each((_, el) => {
+      const mail = $(el).attr('href').replace(/^mailto:\s*/, '').split('?')[0].trim().toLowerCase();
+      if (isValidEmail(mail)) mailtoEmails.add(mail);
+    });
+
+    // 3. Scan footer, header, contact sections for visible text
+    $('script, style, noscript, svg, code, pre').remove();
+    const sections = ['footer', 'header', 'nav',
+      '[class*="contact"]', '[class*="footer"]', '[class*="header"]',
+      '[id*="contact"]', '[id*="footer"]', '[class*="top-bar"]',
+      '[class*="topbar"]', '[class*="info"]', '[class*="phone"]',
+      '[class*="email"]', '[class*="widget"]', '[class*="sidebar"]'];
+    for (const sel of sections) {
+      try {
+        $(sel).each((_, el) => {
+          const text = $(el).text();
+          (text.match(PHONE_RE) || []).forEach(p => { if (isValidPhone(p)) sectionPhones.add(p.trim()); });
+          (text.match(EMAIL_RE) || []).forEach(e => { if (isValidEmail(e)) sectionEmails.add(e); });
+        });
+      } catch {}
+    }
+
+    // 4. If still missing, scan full body text (lower confidence)
+    if (telPhones.size === 0 && sectionPhones.size === 0) {
+      const bodyText = $('body').text();
+      (bodyText.match(PHONE_RE) || []).forEach(p => { if (isValidPhone(p)) sectionPhones.add(p.trim()); });
+    }
+    if (mailtoEmails.size === 0 && sectionEmails.size === 0) {
+      const bodyText = $('body').text();
+      (bodyText.match(EMAIL_RE) || []).forEach(e => { if (isValidEmail(e)) sectionEmails.add(e); });
+    }
+  }
+
+  // 5. Raw HTML fallback for tel:/mailto: (catches links cheerio might miss)
+  (html.match(/href=["']tel:([^"']+)["']/gi) || []).forEach(m => {
+    const tel = m.replace(/href=["']tel:\s*/i, '').replace(/["']$/, '');
+    if (isValidPhone(tel)) telPhones.add(tel);
+  });
+  (html.match(/href=["']mailto:([^"'?]+)/gi) || []).forEach(m => {
+    const mail = m.replace(/href=["']mailto:\s*/i, '').trim().toLowerCase();
+    if (isValidEmail(mail)) mailtoEmails.add(mail);
+  });
+
+  // Merge: tel/mailto links first (highest confidence), then section matches
+  const phones = [...telPhones, ...sectionPhones];
+  const emails = [...mailtoEmails, ...sectionEmails];
+
+  return { phones, emails };
+}
+
+/**
+ * Scrape a website for contact info using Puppeteer as primary (handles JS-rendered sites).
+ * Scans homepage, contact pages, about pages — checks footer, header, and body for phone/email.
+ * Falls back to axios for extra pages if Puppeteer misses info.
  */
 async function scrapeContactInfo(websiteUrl) {
   if (!websiteUrl) return { phones: [], emails: [] };
@@ -93,71 +193,110 @@ async function scrapeContactInfo(websiteUrl) {
   const allEmails = new Set();
   const baseUrl = new URL(websiteUrl).origin;
 
+  // All pages to try, in priority order
   const pagesToTry = [
     websiteUrl,
     `${baseUrl}/contact`,
     `${baseUrl}/contact-us`,
+    `${baseUrl}/contact.html`,
     `${baseUrl}/about`,
     `${baseUrl}/about-us`,
+    `${baseUrl}/about.html`,
+    `${baseUrl}/get-in-touch`,
+    `${baseUrl}/connect`,
+    `${baseUrl}/team`,
+    `${baseUrl}/our-team`,
+    `${baseUrl}/locations`,
+    `${baseUrl}/footer`,  // some sites have a footer page
   ];
 
-  for (const pageUrl of pagesToTry) {
-    try {
-      const { data } = await axios.get(pageUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html',
-        },
-        timeout: 10000,
-        maxRedirects: 3,
-        validateStatus: s => s < 400,
-      });
+  // ── Phase 1: Puppeteer (primary — handles ALL sites including JS-rendered) ──
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    });
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
-      const $ = cheerio.load(data);
+    // Try each page with Puppeteer
+    for (const pageUrl of pagesToTry) {
+      try {
+        const resp = await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 12000 });
+        if (!resp || resp.status() >= 400) continue;
 
-      // Remove scripts/styles to avoid false positives
-      $('script, style, noscript').remove();
-      const text = $('body').text();
+        // Wait extra for JS rendering + lazy-loaded content
+        await new Promise(r => setTimeout(r, 2500));
 
-      // Extract phones
-      const phones = text.match(PHONE_RE) || [];
-      phones.forEach(p => {
-        const cleaned = p.replace(/[^\d]/g, '');
-        // Must be 10 or 11 digits (US phone)
-        if (cleaned.length === 10 || (cleaned.length === 11 && cleaned.startsWith('1'))) {
-          allPhones.add(p.trim());
+        // Scroll down to trigger lazy-loaded footers
+        await page.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Get fully rendered HTML
+        const html = await page.content();
+        const $ = cheerio.load(html);
+        const { phones, emails } = extractContactFromHtml(html, $);
+        phones.forEach(p => allPhones.add(p));
+        emails.forEach(e => allEmails.add(e));
+
+        console.log(`[BuilderLookup]   ${pageUrl.replace(baseUrl,'')||'/'}: ${phones.length}ph, ${emails.length}em`);
+
+        // Also try to find contact page links from the nav/footer that we might have missed
+        if (pageUrl === websiteUrl) {
+          const contactLinks = await page.evaluate(() => {
+            const links = [];
+            document.querySelectorAll('a[href]').forEach(a => {
+              const href = a.href.toLowerCase();
+              const text = a.textContent.toLowerCase();
+              if (text.includes('contact') || text.includes('get in touch') ||
+                  text.includes('reach us') || text.includes('connect') ||
+                  href.includes('/contact') || href.includes('/get-in-touch')) {
+                links.push(a.href);
+              }
+            });
+            return [...new Set(links)].slice(0, 3);
+          });
+          // Add discovered contact links to our list
+          for (const link of contactLinks) {
+            if (!pagesToTry.includes(link) && link.startsWith(baseUrl)) {
+              pagesToTry.push(link);
+            }
+          }
         }
-      });
+      } catch { continue; }
+    }
 
-      // Also check href="tel:..." links
-      $('a[href^="tel:"]').each((_, el) => {
-        const tel = $(el).attr('href').replace('tel:', '').trim();
-        const cleaned = tel.replace(/[^\d]/g, '');
-        if (cleaned.length >= 10) allPhones.add(tel);
-      });
+    await browser.close();
+    browser = null;
+  } catch (err) {
+    console.error(`[BuilderLookup] Puppeteer scrape failed:`, err.message);
+  } finally {
+    if (browser) try { await browser.close(); } catch {}
+  }
 
-      // Extract emails
-      const emails = text.match(EMAIL_RE) || [];
-      emails.forEach(e => {
-        const lower = e.toLowerCase();
-        // Skip obvious non-contact emails
-        if (lower.includes('example.com') || lower.includes('sentry.io') ||
-            lower.includes('wixpress') || lower.includes('.png') ||
-            lower.includes('.jpg') || lower.includes('.svg')) return;
-        allEmails.add(lower);
-      });
-
-      // Also check mailto: links
-      $('a[href^="mailto:"]').each((_, el) => {
-        const mail = $(el).attr('href').replace('mailto:', '').split('?')[0].trim().toLowerCase();
-        if (mail && mail.includes('@')) allEmails.add(mail);
-      });
-
-      // If we found contact info, no need to check more pages
-      if (allPhones.size > 0 && allEmails.size > 0) break;
-    } catch {
-      // Page doesn't exist or errored — try next
-      continue;
+  // ── Phase 2: Axios fallback for any pages Puppeteer missed ──
+  if (allPhones.size === 0 || allEmails.size === 0) {
+    console.log(`[BuilderLookup] Puppeteer found ${allPhones.size} phone(s), ${allEmails.size} email(s) — trying axios fallback...`);
+    for (const pageUrl of pagesToTry.slice(0, 6)) { // only try first 6 with axios
+      try {
+        const { data } = await axios.get(pageUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+          timeout: 10000,
+          maxRedirects: 5,
+          validateStatus: s => s < 400,
+        });
+        const $ = cheerio.load(data);
+        const { phones, emails } = extractContactFromHtml(data, $);
+        phones.forEach(p => allPhones.add(p));
+        emails.forEach(e => allEmails.add(e));
+      } catch { continue; }
     }
   }
 

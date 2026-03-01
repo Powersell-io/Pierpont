@@ -1,6 +1,7 @@
 // SC Lowcountry Permit Tracker — Express Server
 const express = require('express');
 const path = require('path');
+const cron = require('node-cron');
 const config = require('./config');
 const db = require('./db/init');
 const scraper = require('./scraper/index');
@@ -121,6 +122,7 @@ app.get('/api/foia/municipalities', (req, res) => {
         entry.mailtoUrl = `mailto:${m.foia.email}?subject=${subject}&body=${body}`;
       } else if (m.foia.type === 'portal') {
         entry.portalUrl = m.foia.portalUrl;
+        entry.foiaBody = FOIA_BODY;
       }
       return entry;
     });
@@ -222,6 +224,54 @@ app.post('/api/permits/:id/lookup-builder', async (req, res) => {
   }
 });
 
+// ─── Auto-Schedule (7am, 1pm, 6pm EST) ──────────────────────────────────────
+let scheduleEnabled = true;
+const scheduleTimes = ['7:00', '13:00', '18:00']; // EST
+const scheduleHistory = []; // last 20 scheduled runs
+
+async function runScheduledScrape() {
+  const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  console.log(`\n⏰ Scheduled scrape triggered at ${now} EST`);
+  if (scrapeInProgress) {
+    console.log('⏭️  Skipping — scrape already in progress');
+    scheduleHistory.unshift({ time: now, status: 'skipped', reason: 'scrape already in progress' });
+    return;
+  }
+  scrapeInProgress = true;
+  scheduleHistory.unshift({ time: now, status: 'running' });
+  if (scheduleHistory.length > 20) scheduleHistory.pop();
+  try {
+    const result = await scraper.runAllScrapers();
+    scheduleHistory[0].status = 'completed';
+    scheduleHistory[0].permits = result.permitsFound;
+    scheduleHistory[0].newPermits = result.permitsNew;
+    runBuilderLookupAfterScrape();
+  } catch (err) {
+    console.error('Scheduled scrape error:', err);
+    scheduleHistory[0].status = 'error';
+    scheduleHistory[0].error = err.message;
+  } finally {
+    scrapeInProgress = false;
+  }
+}
+
+// Schedule: 7:00 AM, 1:00 PM, 6:00 PM EST (America/New_York)
+const cronJobs = [
+  cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
+  cron.schedule('0 13 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
+  cron.schedule('0 18 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
+];
+
+app.get('/api/schedule', (req, res) => {
+  res.json({ enabled: scheduleEnabled, times: scheduleTimes, timezone: 'EST', history: scheduleHistory });
+});
+
+app.post('/api/schedule/toggle', (req, res) => {
+  scheduleEnabled = !scheduleEnabled;
+  console.log(`⏰ Auto-schedule ${scheduleEnabled ? 'enabled' : 'disabled'}`);
+  res.json({ enabled: scheduleEnabled });
+});
+
 // ─── Future placeholders ─────────────────────────────────────────────────────
 app.post('/api/enrich/:permit_id', async (req, res) => { res.status(501).json({ error: 'Contact enrichment not yet implemented' }); });
 app.post('/api/ghl/push/:permit_id', async (req, res) => { res.status(501).json({ error: 'GoHighLevel integration not yet implemented' }); });
@@ -235,10 +285,11 @@ async function start() {
   await db.backfillOpportunityScores();
   app.listen(config.server.port, () => {
     console.log('');
-    console.log('🏗️  SC Lowcountry Permit Tracker');
+    console.log('🏗️  Pierpont Money Printer');
     console.log(`📡 Server running at http://${config.server.host}:${config.server.port}`);
     console.log('💾 Database initialized');
     console.log('🔍 Ready to scrape permits');
+    console.log('⏰ Auto-scrape scheduled: 7:00 AM, 1:00 PM, 6:00 PM EST');
     console.log('');
   });
 }

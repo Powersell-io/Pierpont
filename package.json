@@ -8,14 +8,20 @@
     "scrape": "node scraper/index.js",
     "dev": "node --watch server.js"
   },
-  "keywords": ["permits", "scraper", "charleston", "construction"],
+  "keywords": [
+    "permits",
+    "scraper",
+    "charleston",
+    "construction"
+  ],
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
-    "express": "^4.21.0",
-    "sql.js": "^1.11.0",
-    "puppeteer": "^23.9.0",
     "axios": "^1.7.9",
-    "cheerio": "^1.0.0"
+    "cheerio": "^1.0.0",
+    "express": "^4.21.0",
+    "node-cron": "^4.2.1",
+    "puppeteer": "^23.9.0",
+    "sql.js": "^1.11.0"
   }
 }
