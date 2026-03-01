@@ -74,6 +74,34 @@ app.get('/api/filters/options', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── FOIA Requests API ──────────────────────────────────────────────────────
+const FOIA_BODY = `To Whom It May Concern,
+
+Pursuant to the South Carolina Freedom of Information Act, I am a taxpaying citizen requesting the following records for research purposes only:
+
+A list of all building permit inspections that received a passing status within the last 90 days, including permit number, address, inspection type, inspection date, and status.
+
+Thank you for your time.`;
+
+app.get('/api/foia/municipalities', (req, res) => {
+  const munis = config.municipalities;
+  const result = Object.values(munis)
+    .filter(m => m.foia)
+    .map(m => {
+      const entry = { name: m.name, slug: m.slug, driveTimeMinutes: m.driveTimeMinutes, foiaType: m.foia.type };
+      if (m.foia.type === 'email') {
+        const subject = encodeURIComponent('FOIA REQUEST');
+        const body = encodeURIComponent(FOIA_BODY);
+        entry.email = m.foia.email;
+        entry.mailtoUrl = `mailto:${m.foia.email}?subject=${subject}&body=${body}`;
+      } else if (m.foia.type === 'portal') {
+        entry.portalUrl = m.foia.portalUrl;
+      }
+      return entry;
+    });
+  res.json(result);
+});
+
 // ─── Stats API ───────────────────────────────────────────────────────────────
 app.get('/api/stats', async (req, res) => {
   try { res.json(await db.getStats(req.query)); }

@@ -154,6 +154,18 @@
       </div>
     </div>
 
+    <!-- FOIA Requests Panel -->
+    <div id="foiaPanel" class="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6 hidden">
+      <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="toggleFoiaPanel()">
+        <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">FOIA Requests &mdash; Municipalities Without Public Portals</h3>
+        <span id="foiaToggle" class="text-gray-400 text-xs">&#x25BC;</span>
+      </div>
+      <div id="foiaBody">
+        <p class="text-xs text-gray-500 mb-3">These municipalities require a SC FOIA request to obtain permit data. Click to send a pre-filled email or visit their request portal.</p>
+        <div id="foiaList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
+      </div>
+    </div>
+
     <!-- Results Table -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-6">
       <div class="overflow-x-auto">
@@ -217,6 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadFilterOptions();
   loadPermits();
   loadStats();
+  loadFoiaMunicipalities();
 });
 
 // ── Filter Options ────
@@ -501,6 +514,33 @@ function phone(p){if(!p)return'<span class="empty-cell">&mdash;</span>';return`<
 function email(e){if(!e)return'<span class="empty-cell">&mdash;</span>';return`<a href="mailto:${esc(e)}" class="text-blue-600 hover:underline text-xs">${esc(e)}</a>`;}
 function statusBadge(s){if(!s)return'<span class="empty-cell">&mdash;</span>';const l=s.toLowerCase();if(l.includes('pass')||l.includes('approved'))return`<span class="badge badge-green">${esc(s)}</span>`;if(l.includes('pending')||l.includes('scheduled'))return`<span class="badge badge-yellow">${esc(s)}</span>`;return`<span class="badge badge-gray">${esc(s)}</span>`;}
 function scoreBadge(score){if(score==null||score===undefined)return'<span class="badge badge-gray">--</span>';const s=Number(score);if(s>=70)return`<span class="badge badge-green">${s}</span>`;if(s>=40)return`<span class="badge badge-yellow">${s}</span>`;if(s>=1)return`<span class="badge badge-red">${s}</span>`;return`<span class="badge badge-gray">${s}</span>`;}
+
+// ── FOIA Panel ────
+let foiaOpen = true;
+async function loadFoiaMunicipalities() {
+  try {
+    const data = await (await fetch('/api/foia/municipalities')).json();
+    if (!data.length) return;
+    document.getElementById('foiaPanel').classList.remove('hidden');
+    const list = document.getElementById('foiaList');
+    list.innerHTML = '';
+    data.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-200';
+      if (m.foiaType === 'email') {
+        div.innerHTML = `<div><div class="text-sm font-medium text-gray-800">${esc(m.name)}</div><div class="text-xs text-gray-500">${esc(m.email)}</div></div><a href="${esc(m.mailtoUrl)}" class="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">&#x2709; Send Request</a>`;
+      } else {
+        div.innerHTML = `<div><div class="text-sm font-medium text-gray-800">${esc(m.name)}</div><div class="text-xs text-gray-500">NextRequest Portal</div></div><a href="${esc(m.portalUrl)}" target="_blank" class="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap">&#x1f517; Open Portal</a>`;
+      }
+      list.appendChild(div);
+    });
+  } catch (e) { console.error('Failed to load FOIA municipalities:', e); }
+}
+function toggleFoiaPanel() {
+  foiaOpen = !foiaOpen;
+  document.getElementById('foiaBody').style.display = foiaOpen ? '' : 'none';
+  document.getElementById('foiaToggle').innerHTML = foiaOpen ? '&#x25BC;' : '&#x25B6;';
+}
 
 // ── Clear All Data (triple-click to confirm) ────
 let clearClickCount = 0;

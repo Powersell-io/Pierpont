@@ -242,6 +242,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 25,
       notes: 'Login-walled CityForce portal',
+      foia: { type: 'portal', portalUrl: 'https://hanahan.nextrequest.com/' },
     },
     charlestonCounty: {
       name: 'Charleston County',
@@ -280,6 +281,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 35,
       notes: 'No online portal — email only',
+      foia: { type: 'email', email: 'permits@follybeach.gov' },
     },
     summerville: {
       name: 'Town of Summerville',
@@ -314,6 +316,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 50,
       notes: 'Login-walled CommunityCore portal',
+      foia: { type: 'email', email: 'info@monckscornersc.gov' },
     },
 
     // ── Extended tier: 60-90 min ─────────────────────────────────────────────
@@ -333,6 +336,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 70,
       notes: 'No online portal — PDF only',
+      foia: { type: 'email', email: 'cityfoiarequest@georgetownsc.gov' },
     },
     colletonCounty: {
       name: 'Colleton County',
@@ -342,6 +346,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 70,
       notes: 'No online portal — PDF only',
+      foia: { type: 'email', email: 'foia@colletoncounty.org' },
     },
     bluffton: {
       name: 'Town of Bluffton',
@@ -359,6 +364,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 80,
       notes: 'MyGovernmentOnline — needs research',
+      foia: { type: 'portal', portalUrl: 'https://beaufort.nextrequest.com/' },
     },
     hiltonHead: {
       name: 'Town of Hilton Head Island',
@@ -385,6 +391,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 85,
       notes: 'No online portal — PDF only',
+      foia: { type: 'email', email: 'FOIA-Request@wc.sc.gov' },
     },
     orangeburgCounty: {
       name: 'Orangeburg County',
@@ -394,6 +401,7 @@ module.exports = {
       active: false,
       driveTimeMinutes: 85,
       notes: 'No online portal — PDF only',
+      foia: { type: 'email', email: 'foia@orangeburgcounty.org' },
     },
   },
 
