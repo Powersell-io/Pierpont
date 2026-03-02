@@ -24,15 +24,8 @@ try:
 except ImportError:
     HAS_BS4 = False
 
-try:
-    from ddgs import DDGS
-    HAS_DDGS = True
-except ImportError:
-    try:
-        from duckduckgo_search import DDGS
-        HAS_DDGS = True
-    except ImportError:
-        HAS_DDGS = False
+# Google Places API key — set as Streamlit secret or env var for best results
+GOOGLE_PLACES_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pierpont")
@@ -488,7 +481,7 @@ JUNK_EMAIL_PATTERNS = [
 PHONE_RE = re.compile(r'(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}')
 EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
-WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
 def _is_valid_phone(p):
@@ -525,7 +518,6 @@ def _extract_contacts_from_html(html_text):
     emails = set()
 
     if not HAS_BS4 or not html_text:
-        # Fallback: regex only
         for m in PHONE_RE.findall(html_text or ""):
             if _is_valid_phone(m):
                 phones.add(m.strip())
@@ -596,104 +588,206 @@ def _extract_contacts_from_html(html_text):
     return list(phones), list(emails)
 
 
+# ─── Google Places API (Primary — most reliable) ────────────────────────────
+
+def lookup_google_places(session, company_name, city=None):
+    """Look up a builder on Google Places API — returns phone, website, address directly.
+
+    This is the primary lookup method. Google Business profiles have verified
+    phone numbers and websites. One API call gets everything we need.
+    """
+    if not GOOGLE_PLACES_KEY:
+        return None
+    location = city or "South Carolina"
+    location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
+    query = f"{company_name} {location} SC builder"
+
+    try:
+        resp = session.post(
+            "https://places.googleapis.com/v1/places:searchText",
+            json={"textQuery": query, "maxResultCount": 3},
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": GOOGLE_PLACES_KEY,
+                "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber,places.websiteUri,places.formattedAddress",
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            log.warning(f"  Google Places API error {resp.status_code}: {resp.text[:200]}")
+            return None
+
+        data = resp.json()
+        places = data.get("places", [])
+        if not places:
+            log.info(f"  Google Places: no results for '{company_name}'")
+            return None
+
+        # Pick the best match — prefer one whose name contains company words
+        company_words = set(re.findall(r'[a-z]+', company_name.lower()))
+        company_words -= {"the", "of", "and", "inc", "llc", "co", "company", "corp", "group"}
+
+        best = places[0]
+        for place in places:
+            name = (place.get("displayName", {}).get("text") or "").lower()
+            if any(w in name for w in company_words if len(w) > 2):
+                best = place
+                break
+
+        phone = best.get("nationalPhoneNumber")
+        website = best.get("websiteUri")
+        name = best.get("displayName", {}).get("text", "")
+        log.info(f"  Google Places: '{name}' → phone={phone}, website={website}")
+        return {
+            "phone": phone,
+            "website": website,
+            "source": "google_places",
+        }
+    except Exception as e:
+        log.warning(f"  Google Places API failed: {e}")
+        return None
+
+
+# ─── Bing Search (Free fallback — no native deps, works on Streamlit Cloud) ─
+
 def _domain_matches_company(hostname, company_name):
     """Check if a domain name plausibly belongs to the company."""
     if not hostname or not company_name:
         return False
-    # Extract words from company name (lowercase, alpha only)
     words = re.findall(r'[a-z]+', company_name.lower())
-    # Remove common filler words
     filler = {"the", "of", "and", "inc", "llc", "co", "company", "corp", "group", "sc", "charleston"}
     words = [w for w in words if w not in filler and len(w) > 2]
     if not words:
         return False
-    # Check if any meaningful word appears in the hostname
     hostname_lower = hostname.lower().replace("-", "").replace(".", "")
-    matches = sum(1 for w in words if w in hostname_lower)
-    return matches >= 1
+    return sum(1 for w in words if w in hostname_lower) >= 1
 
 
-def find_company_website(session, company_name, city=None):
-    """Search DuckDuckGo for a builder company website using ddgs library.
+_last_search_time = 0  # Module-level rate limiter for DDG
 
-    Uses a two-pass strategy: first pass looks for domains that match the company
-    name (most likely their actual site), second pass accepts any non-skip domain.
+def find_company_website_search(session, company_name, city=None):
+    """Search for a builder company website using DuckDuckGo HTML (pure requests).
+
+    Works on Streamlit Cloud — only uses requests + BeautifulSoup, no native deps.
+    Two-pass: prefer domains matching company name, then first valid result.
     """
-    if not company_name:
+    global _last_search_time
+    if not company_name or not HAS_BS4:
         return None
+    # Rate limit: wait at least 3 seconds between DDG searches to avoid blocking
+    elapsed = time.time() - _last_search_time
+    if elapsed < 3:
+        time.sleep(3 - elapsed)
+    _last_search_time = time.time()
     location = city or "South Carolina"
-    # Strip "City of" / "Town of" prefixes for cleaner search
     location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
-    query = f"{company_name} {location} South Carolina contractor builder"
+    query = f"{company_name} {location} SC builder"
 
-    def _is_valid_result(href):
-        """Check if a URL is a valid (non-skip) result."""
-        try:
-            hostname = urlparse(href).hostname
-            if not hostname:
-                return None
-            hostname = hostname.lower()
-            if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
-                return None
-            if "duckduckgo" in hostname:
-                return None
-            return hostname
-        except Exception:
-            return None
+    def _extract_ddg_results(soup):
+        """Extract real URLs from DuckDuckGo HTML results."""
+        valid = []
+        for a in soup.select("a.result__a"):
+            href = a.get("href", "")
+            # DuckDuckGo wraps URLs with a redirect — extract the real URL from uddg param
+            if "uddg=" in href:
+                try:
+                    from urllib.parse import parse_qs
+                    qs = parse_qs(urlparse(href).query)
+                    real_urls = qs.get("uddg", [])
+                    if real_urls:
+                        href = real_urls[0]
+                except Exception:
+                    continue
+            # Skip DuckDuckGo internal links and ads
+            if "duckduckgo.com" in href or "y.js?" in href:
+                continue
+            try:
+                hostname = urlparse(href).hostname
+                if not hostname:
+                    continue
+                hostname = hostname.lower()
+                if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
+                    continue
+                valid.append((href, hostname))
+            except Exception:
+                continue
+        return valid
 
-    if HAS_DDGS:
-        try:
-            results = DDGS().text(query, max_results=15)
-            valid_results = []
-            for r in results:
-                href = r.get("href", "")
-                hostname = _is_valid_result(href)
-                if hostname:
-                    valid_results.append((href, hostname))
-
-            # Pass 1: prefer domains that match the company name
-            for href, hostname in valid_results:
-                if _domain_matches_company(hostname, company_name):
-                    log.info(f"  Search: matched domain '{hostname}' to company '{company_name}'")
-                    return href
-
-            # Pass 2: return first valid result
-            if valid_results:
-                return valid_results[0][0]
-
-        except Exception as e:
-            log.warning(f"DDGS search failed for '{company_name}': {e}")
-
-    # Fallback: try DuckDuckGo HTML lite
     try:
+        # DuckDuckGo HTML endpoint — works with pure requests, no JS needed
         resp = session.get(
             "https://html.duckduckgo.com/html/",
             params={"q": query},
-            headers={"User-Agent": WEB_UA},
+            headers={
+                "User-Agent": WEB_UA,
+                "Accept": "text/html,application/xhtml+xml,*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
             timeout=15,
         )
-        if HAS_BS4 and resp.status_code in (200, 202):
+        if resp.status_code not in (200, 202):
+            log.warning(f"  DDG HTML search: status={resp.status_code}")
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        valid_results = _extract_ddg_results(soup)
+        log.info(f"  DDG HTML search: {len(valid_results)} valid results for '{company_name}'")
+
+        # Pass 1: prefer domains matching company name
+        for href, hostname in valid_results:
+            if _domain_matches_company(hostname, company_name):
+                log.info(f"  Search: matched '{hostname}' to '{company_name}'")
+                return href
+
+        # Pass 2: first valid result
+        if valid_results:
+            log.info(f"  Search: using first result '{valid_results[0][1]}'")
+            return valid_results[0][0]
+
+    except Exception as e:
+        log.warning(f"  DDG HTML search failed for '{company_name}': {e}")
+
+    # Fallback: DuckDuckGo lite POST (different endpoint, may have different rate limits)
+    try:
+        resp = session.post(
+            "https://lite.duckduckgo.com/lite/",
+            data={"q": query},
+            headers={
+                "User-Agent": WEB_UA,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             valid_results = []
-            for a in soup.select("a.result__a"):
-                href = a.get("href", "")
-                if "uddg=" in href:
-                    from urllib.parse import parse_qs
-                    qs = parse_qs(urlparse(href).query)
-                    href = qs.get("uddg", [href])[0]
-                hostname = _is_valid_result(href)
-                if hostname:
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if "duckduckgo.com" in href or not href.startswith("http"):
+                    continue
+                try:
+                    hostname = urlparse(href).hostname
+                    if not hostname:
+                        continue
+                    hostname = hostname.lower()
+                    if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
+                        continue
                     valid_results.append((href, hostname))
-            # Same two-pass strategy
+                except Exception:
+                    continue
             for href, hostname in valid_results:
                 if _domain_matches_company(hostname, company_name):
                     return href
             if valid_results:
                 return valid_results[0][0]
     except Exception as e:
-        log.warning(f"DuckDuckGo HTML fallback failed for '{company_name}': {e}")
+        log.warning(f"  DDG Lite search failed for '{company_name}': {e}")
+
+    log.info(f"  Search: no results found for '{company_name}'")
     return None
 
+
+# ─── Deep Website Scraper ──────────────────────────────────────────────────
 
 def _discover_contact_links(html_text, base_url):
     """Discover contact/about/team page links from navigation on the homepage."""
@@ -710,13 +804,10 @@ def _discover_contact_links(html_text, base_url):
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
         text = a.get_text(" ", strip=True).lower()
-        # Check if link text or href contains contact-like keywords
         if contact_patterns.search(text) or contact_patterns.search(href):
-            # Resolve relative URLs
             if href.startswith("/"):
                 href = f"{parsed_base.scheme}://{parsed_base.netloc}{href}"
             elif href.startswith("http"):
-                # Only follow links on the same domain
                 try:
                     link_host = urlparse(href).hostname or ""
                     if link_host.lower() != base_host.lower():
@@ -724,7 +815,6 @@ def _discover_contact_links(html_text, base_url):
                 except Exception:
                     continue
             else:
-                # Relative path without leading /
                 if href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:"):
                     continue
                 href = f"{parsed_base.scheme}://{parsed_base.netloc}/{href}"
@@ -733,15 +823,7 @@ def _discover_contact_links(html_text, base_url):
 
 
 def scrape_website_contacts(session, website_url):
-    """Deep-scrape a builder website for phone/email across many pages.
-
-    Strategy:
-    1. Scrape the homepage and extract contacts
-    2. Discover contact/about pages from navigation links
-    3. Try 15+ common static page paths
-    4. Scrape up to 12 unique pages total
-    5. Stop early if both phone and email are found
-    """
+    """Deep-scrape a builder website for phone/email across many pages."""
     if not website_url:
         return [], []
     all_phones = set()
@@ -754,7 +836,6 @@ def scrape_website_contacts(session, website_url):
     except Exception:
         return [], []
 
-    # Static paths to try (order by likelihood of having contact info)
     static_paths = [
         "/contact", "/contact-us", "/contact.html", "/contactus",
         "/about", "/about-us", "/about.html", "/aboutus",
@@ -764,23 +845,19 @@ def scrape_website_contacts(session, website_url):
     ]
 
     def _fetch_and_extract(url):
-        """Fetch a page and extract contacts. Returns True if page was fetched."""
         normalized = url.rstrip("/").lower()
         if normalized in visited:
-            return False
+            return False, ""
         visited.add(normalized)
         try:
             resp = session.get(
                 url,
-                headers={
-                    "User-Agent": WEB_UA,
-                    "Accept": "text/html,application/xhtml+xml,*/*",
-                },
+                headers={"User-Agent": WEB_UA, "Accept": "text/html,application/xhtml+xml,*/*"},
                 timeout=12,
                 allow_redirects=True,
             )
             if resp.status_code >= 400:
-                return False
+                return False, ""
             phones, emails = _extract_contacts_from_html(resp.text)
             all_phones.update(phones)
             all_emails.update(emails)
@@ -788,63 +865,80 @@ def scrape_website_contacts(session, website_url):
         except Exception:
             return False, ""
 
-    # Phase 1: Scrape homepage
-    log.info(f"  Deep scrape: fetching homepage {website_url}")
+    # Phase 1: Homepage
+    log.info(f"  Deep scrape: {website_url}")
     homepage_html = ""
     try:
-        result = _fetch_and_extract(website_url)
-        if isinstance(result, tuple):
-            _, homepage_html = result
+        ok, homepage_html = _fetch_and_extract(website_url)
     except Exception:
         pass
 
-    # Phase 2: Discover contact links from nav
+    # Phase 2: Discover nav links
     discovered_links = _discover_contact_links(homepage_html, base_url)
-    log.info(f"  Deep scrape: discovered {len(discovered_links)} nav links")
 
-    # Phase 3: Build priority queue — discovered links first, then static paths
-    pages_to_try = []
-    for link in discovered_links:
-        pages_to_try.append(link)
-    for path in static_paths:
-        pages_to_try.append(f"{base_url}{path}")
-
-    # Phase 4: Scrape pages (up to 12 total including homepage)
-    max_pages = 12
-    pages_scraped = 1  # homepage already done
+    # Phase 3: Scrape discovered links + static paths (up to 12 pages)
+    pages_to_try = list(discovered_links) + [f"{base_url}{p}" for p in static_paths]
+    pages_scraped = 1
     for page_url in pages_to_try:
-        if pages_scraped >= max_pages:
+        if pages_scraped >= 12:
             break
         if all_phones and all_emails:
-            log.info(f"  Deep scrape: found both phone + email, stopping early")
             break
         try:
-            result = _fetch_and_extract(page_url)
-            if isinstance(result, tuple) and result[0]:
+            ok, _ = _fetch_and_extract(page_url)
+            if ok:
                 pages_scraped += 1
         except Exception:
             continue
 
-    log.info(f"  Deep scrape: scraped {pages_scraped} pages, found {len(all_phones)} phone(s), {len(all_emails)} email(s)")
+    log.info(f"  Deep scrape: {pages_scraped} pages → {len(all_phones)} phone(s), {len(all_emails)} email(s)")
     return list(all_phones), list(all_emails)
 
 
-def lookup_builder_web(session, company_name, city=None):
-    """Full builder lookup: search web for company → scrape contact info."""
-    log.info(f"Builder lookup: '{company_name}' in {city or 'SC'}")
-    website = find_company_website(session, company_name, city=city)
-    if not website:
-        log.info(f"  No website found for '{company_name}'")
-        return {"website": None, "phone": None, "email": None}
+# ─── Master Builder Lookup (coordinates all methods) ────────────────────────
 
-    log.info(f"  Found website: {website}")
-    phones, emails = scrape_website_contacts(session, website)
-    log.info(f"  Found {len(phones)} phone(s), {len(emails)} email(s)")
-    return {
-        "website": website,
-        "phone": phones[0] if phones else None,
-        "email": emails[0] if emails else None,
-    }
+def lookup_builder_web(session, company_name, city=None):
+    """Look up builder contact info. Tries Google Places first, then Bing + scrape.
+
+    Returns: {"website": str|None, "phone": str|None, "email": str|None, "source": str}
+    """
+    log.info(f"Builder lookup: '{company_name}' in {city or 'SC'}")
+
+    # Method 1: Google Places API (best — returns phone + website directly)
+    if GOOGLE_PLACES_KEY:
+        gp = lookup_google_places(session, company_name, city=city)
+        if gp:
+            result = {
+                "website": gp.get("website"),
+                "phone": gp.get("phone"),
+                "email": None,
+                "source": "google_places",
+            }
+            # If we got a website but no phone/email, deep scrape it
+            if result["website"] and (not result["phone"] or not result["email"]):
+                phones, emails = scrape_website_contacts(session, result["website"])
+                if not result["phone"] and phones:
+                    result["phone"] = phones[0]
+                if not result["email"] and emails:
+                    result["email"] = emails[0]
+            log.info(f"  Result (Google): website={result['website']}, phone={result['phone']}, email={result['email']}")
+            return result
+
+    # Method 2: DuckDuckGo HTML search → find website → deep scrape
+    website = find_company_website_search(session, company_name, city=city)
+    if website:
+        phones, emails = scrape_website_contacts(session, website)
+        result = {
+            "website": website,
+            "phone": phones[0] if phones else None,
+            "email": emails[0] if emails else None,
+            "source": "web_scrape",
+        }
+        log.info(f"  Result (Bing): website={result['website']}, phone={result['phone']}, email={result['email']}")
+        return result
+
+    log.info(f"  No results found for '{company_name}'")
+    return {"website": None, "phone": None, "email": None, "source": "none"}
 
 
 def run_scraper(status_placeholder):
@@ -1543,6 +1637,19 @@ def main():
         lookup_btn = st.button("Lookup Builders", use_container_width=True)
     with btn_cols[4]:
         clear_btn = st.button("Clear All Data", use_container_width=True)
+    with btn_cols[3]:
+        if GOOGLE_PLACES_KEY:
+            st.markdown(
+                '<div style="text-align:center;padding:6px;font-size:.6rem;color:#4ADE80">'
+                'Google Places API active</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="text-align:center;padding:6px;font-size:.6rem;color:#F59E0B">'
+                'Set GOOGLE_PLACES_API_KEY for best results</div>',
+                unsafe_allow_html=True,
+            )
     with btn_cols[5]:
         if st.button("Logout", use_container_width=True):
             st.session_state.authenticated = False
@@ -1578,7 +1685,8 @@ def main():
     if lookup_btn:
         st.session_state.clear_confirm = 0
         status_box = st.empty()
-        with st.spinner("Looking up builder websites..."):
+        method = "Google Places API" if GOOGLE_PLACES_KEY else "Web Search + Site Scrape"
+        with st.spinner(f"Looking up builders via {method}..."):
             web_session = requests.Session()
             rows = conn.execute(
                 "SELECT id, builder_company, builder_phone, builder_email, builder_website, municipality "
@@ -1588,17 +1696,24 @@ def main():
             if not rows:
                 status_box.info("All builders already have website data.")
             else:
+                # Deduplicate: only look up each company once
                 companies_searched = set()
                 company_results = {}
                 found_count = 0
-                for idx, row in enumerate(rows):
+                unique_companies = []
+                for row in rows:
                     company = row[1].strip()
-                    if not company or company in companies_searched:
-                        continue
-                    companies_searched.add(company)
-                    city = row[5] if len(row) > 5 else None
-                    if idx % 3 == 0:
-                        status_box.info(f"Looking up {idx + 1}/{len(rows)}: {company[:40]}...")
+                    if company and company not in companies_searched:
+                        companies_searched.add(company)
+                        unique_companies.append((company, row[5] if len(row) > 5 else None))
+
+                status_box.info(
+                    f"Found {len(unique_companies)} unique builders to look up via {method}..."
+                )
+                for idx, (company, city) in enumerate(unique_companies):
+                    status_box.info(
+                        f"[{idx + 1}/{len(unique_companies)}] Looking up: {company[:40]}..."
+                    )
                     result = lookup_builder_web(web_session, company, city=city)
                     company_results[company] = result
                     if result.get("website"):
@@ -1620,7 +1735,10 @@ def main():
                         )
                     time.sleep(2)
                 conn.commit()
-                status_box.success(f"Builder lookup complete! {found_count}/{len(companies_searched)} companies found.")
+                source_note = f" (via {method})" if GOOGLE_PLACES_KEY else " (set GOOGLE_PLACES_API_KEY for better results)"
+                status_box.success(
+                    f"Builder lookup complete! {found_count}/{len(unique_companies)} websites found{source_note}"
+                )
                 st.rerun()
 
     # ── FOIA Section (TOP — first thing after header/buttons) ──
