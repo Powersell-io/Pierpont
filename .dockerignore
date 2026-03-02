@@ -1,0 +1,11 @@
+node_modules
+__pycache__
+.git
+.claude
+*.pyc
+nul
+screenshots
+research
+diagnostic*.js
+test-*.js
+seen_permits.json

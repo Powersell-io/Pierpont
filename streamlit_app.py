@@ -588,67 +588,30 @@ def _extract_contacts_from_html(html_text):
     return list(phones), list(emails)
 
 
-# ─── Google Places API (Primary — most reliable) ────────────────────────────
+# ─── Playwright Browser Manager ─────────────────────────────────────────────
+# Railway runs Docker with Chromium installed — Playwright gives us a real browser
+# just like the original Node.js Puppeteer version. No CAPTCHAs, no JS issues.
 
-def lookup_google_places(session, company_name, city=None):
-    """Look up a builder on Google Places API — returns phone, website, address directly.
+_pw_browser = None
 
-    This is the primary lookup method. Google Business profiles have verified
-    phone numbers and websites. One API call gets everything we need.
-    """
-    if not GOOGLE_PLACES_KEY:
-        return None
-    location = city or "South Carolina"
-    location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
-    query = f"{company_name} {location} SC builder"
-
+def _get_browser():
+    """Get or create a shared Playwright browser instance."""
+    global _pw_browser
+    if _pw_browser and _pw_browser.is_connected():
+        return _pw_browser
     try:
-        resp = session.post(
-            "https://places.googleapis.com/v1/places:searchText",
-            json={"textQuery": query, "maxResultCount": 3},
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": GOOGLE_PLACES_KEY,
-                "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber,places.websiteUri,places.formattedAddress",
-            },
-            timeout=15,
+        from playwright.sync_api import sync_playwright
+        pw = sync_playwright().start()
+        _pw_browser = pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
         )
-        if resp.status_code != 200:
-            log.warning(f"  Google Places API error {resp.status_code}: {resp.text[:200]}")
-            return None
-
-        data = resp.json()
-        places = data.get("places", [])
-        if not places:
-            log.info(f"  Google Places: no results for '{company_name}'")
-            return None
-
-        # Pick the best match — prefer one whose name contains company words
-        company_words = set(re.findall(r'[a-z]+', company_name.lower()))
-        company_words -= {"the", "of", "and", "inc", "llc", "co", "company", "corp", "group"}
-
-        best = places[0]
-        for place in places:
-            name = (place.get("displayName", {}).get("text") or "").lower()
-            if any(w in name for w in company_words if len(w) > 2):
-                best = place
-                break
-
-        phone = best.get("nationalPhoneNumber")
-        website = best.get("websiteUri")
-        name = best.get("displayName", {}).get("text", "")
-        log.info(f"  Google Places: '{name}' → phone={phone}, website={website}")
-        return {
-            "phone": phone,
-            "website": website,
-            "source": "google_places",
-        }
+        log.info("Playwright browser launched")
+        return _pw_browser
     except Exception as e:
-        log.warning(f"  Google Places API failed: {e}")
+        log.warning(f"Playwright unavailable: {e}")
         return None
 
-
-# ─── Bing Search (Free fallback — no native deps, works on Streamlit Cloud) ─
 
 def _domain_matches_company(hostname, company_name):
     """Check if a domain name plausibly belongs to the company."""
@@ -663,44 +626,112 @@ def _domain_matches_company(hostname, company_name):
     return sum(1 for w in words if w in hostname_lower) >= 1
 
 
-_last_search_time = 0  # Module-level rate limiter for DDG
+# ─── Google Places API (optional — best if you have a key) ──────────────────
 
-def find_company_website_search(session, company_name, city=None):
-    """Search for a builder company website using DuckDuckGo HTML (pure requests).
-
-    Works on Streamlit Cloud — only uses requests + BeautifulSoup, no native deps.
-    Two-pass: prefer domains matching company name, then first valid result.
-    """
-    global _last_search_time
-    if not company_name or not HAS_BS4:
+def lookup_google_places(session, company_name, city=None):
+    """Look up a builder on Google Places API — returns phone + website directly."""
+    if not GOOGLE_PLACES_KEY:
         return None
-    # Rate limit: wait at least 3 seconds between DDG searches to avoid blocking
-    elapsed = time.time() - _last_search_time
-    if elapsed < 3:
-        time.sleep(3 - elapsed)
-    _last_search_time = time.time()
+    location = city or "South Carolina"
+    location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
+    query = f"{company_name} {location} SC builder"
+    try:
+        resp = session.post(
+            "https://places.googleapis.com/v1/places:searchText",
+            json={"textQuery": query, "maxResultCount": 3},
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": GOOGLE_PLACES_KEY,
+                "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber,places.websiteUri",
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            log.warning(f"  Google Places error {resp.status_code}")
+            return None
+        places = resp.json().get("places", [])
+        if not places:
+            return None
+        company_words = set(re.findall(r'[a-z]+', company_name.lower()))
+        company_words -= {"the", "of", "and", "inc", "llc", "co", "company", "corp", "group"}
+        best = places[0]
+        for place in places:
+            name = (place.get("displayName", {}).get("text") or "").lower()
+            if any(w in name for w in company_words if len(w) > 2):
+                best = place
+                break
+        phone = best.get("nationalPhoneNumber")
+        website = best.get("websiteUri")
+        name = best.get("displayName", {}).get("text", "")
+        log.info(f"  Google Places: '{name}' → phone={phone}, website={website}")
+        return {"phone": phone, "website": website}
+    except Exception as e:
+        log.warning(f"  Google Places failed: {e}")
+        return None
+
+
+# ─── Playwright-Powered Search (DuckDuckGo via real browser) ────────────────
+
+def find_company_website_browser(company_name, city=None):
+    """Search DuckDuckGo using a real browser — bypasses CAPTCHAs.
+
+    This is the same approach the original Node.js Puppeteer version used.
+    Works on Railway because Docker has Chromium installed.
+    """
+    browser = _get_browser()
+    if not browser:
+        return None
+    if not company_name:
+        return None
     location = city or "South Carolina"
     location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
     query = f"{company_name} {location} SC builder"
 
-    def _extract_ddg_results(soup):
-        """Extract real URLs from DuckDuckGo HTML results."""
-        valid = []
-        for a in soup.select("a.result__a"):
-            href = a.get("href", "")
-            # DuckDuckGo wraps URLs with a redirect — extract the real URL from uddg param
-            if "uddg=" in href:
-                try:
-                    from urllib.parse import parse_qs
-                    qs = parse_qs(urlparse(href).query)
-                    real_urls = qs.get("uddg", [])
-                    if real_urls:
-                        href = real_urls[0]
-                except Exception:
-                    continue
-            # Skip DuckDuckGo internal links and ads
-            if "duckduckgo.com" in href or "y.js?" in href:
-                continue
+    page = None
+    try:
+        page = browser.new_page(
+            user_agent=WEB_UA,
+            viewport={"width": 1280, "height": 720},
+        )
+        page.set_default_timeout(20000)
+
+        # Navigate to DuckDuckGo
+        page.goto(f"https://duckduckgo.com/?q={quote(query)}", wait_until="domcontentloaded")
+        time.sleep(2)
+
+        # Wait for results to load
+        try:
+            page.wait_for_selector("a[data-testid='result-title-a'], article a, .result__a", timeout=10000)
+        except Exception:
+            pass
+
+        # Extract result links from page
+        links = page.evaluate("""() => {
+            const results = [];
+            // Try new DDG layout
+            document.querySelectorAll('a[data-testid="result-title-a"]').forEach(a => {
+                if (a.href) results.push(a.href);
+            });
+            // Try classic DDG layout
+            if (results.length === 0) {
+                document.querySelectorAll('a.result__a').forEach(a => {
+                    if (a.href) results.push(a.href);
+                });
+            }
+            // Fallback: any article links
+            if (results.length === 0) {
+                document.querySelectorAll('article a[href^="http"]').forEach(a => {
+                    results.push(a.href);
+                });
+            }
+            return results;
+        }""")
+
+        log.info(f"  Browser search: {len(links)} results for '{company_name}'")
+
+        # Filter and pick best result
+        valid_results = []
+        for href in links:
             try:
                 hostname = urlparse(href).hostname
                 if not hostname:
@@ -708,96 +739,156 @@ def find_company_website_search(session, company_name, city=None):
                 hostname = hostname.lower()
                 if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
                     continue
-                valid.append((href, hostname))
+                if "duckduckgo" in hostname:
+                    continue
+                valid_results.append((href, hostname))
             except Exception:
                 continue
-        return valid
-
-    try:
-        # DuckDuckGo HTML endpoint — works with pure requests, no JS needed
-        resp = session.get(
-            "https://html.duckduckgo.com/html/",
-            params={"q": query},
-            headers={
-                "User-Agent": WEB_UA,
-                "Accept": "text/html,application/xhtml+xml,*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            timeout=15,
-        )
-        if resp.status_code not in (200, 202):
-            log.warning(f"  DDG HTML search: status={resp.status_code}")
-            return None
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        valid_results = _extract_ddg_results(soup)
-        log.info(f"  DDG HTML search: {len(valid_results)} valid results for '{company_name}'")
 
         # Pass 1: prefer domains matching company name
         for href, hostname in valid_results:
             if _domain_matches_company(hostname, company_name):
-                log.info(f"  Search: matched '{hostname}' to '{company_name}'")
+                log.info(f"  Browser: matched '{hostname}' to '{company_name}'")
                 return href
 
         # Pass 2: first valid result
         if valid_results:
-            log.info(f"  Search: using first result '{valid_results[0][1]}'")
+            log.info(f"  Browser: first result '{valid_results[0][1]}'")
             return valid_results[0][0]
 
+        log.info(f"  Browser: no valid results for '{company_name}'")
     except Exception as e:
-        log.warning(f"  DDG HTML search failed for '{company_name}': {e}")
-
-    # Fallback: DuckDuckGo lite POST (different endpoint, may have different rate limits)
-    try:
-        resp = session.post(
-            "https://lite.duckduckgo.com/lite/",
-            data={"q": query},
-            headers={
-                "User-Agent": WEB_UA,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            valid_results = []
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
-                if "duckduckgo.com" in href or not href.startswith("http"):
-                    continue
-                try:
-                    hostname = urlparse(href).hostname
-                    if not hostname:
-                        continue
-                    hostname = hostname.lower()
-                    if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
-                        continue
-                    valid_results.append((href, hostname))
-                except Exception:
-                    continue
-            for href, hostname in valid_results:
-                if _domain_matches_company(hostname, company_name):
-                    return href
-            if valid_results:
-                return valid_results[0][0]
-    except Exception as e:
-        log.warning(f"  DDG Lite search failed for '{company_name}': {e}")
-
-    log.info(f"  Search: no results found for '{company_name}'")
+        log.warning(f"  Browser search failed for '{company_name}': {e}")
+    finally:
+        if page:
+            try:
+                page.close()
+            except Exception:
+                pass
     return None
 
 
-# ─── Deep Website Scraper ──────────────────────────────────────────────────
+# ─── Playwright-Powered Website Scraper ─────────────────────────────────────
+
+def scrape_website_browser(website_url):
+    """Scrape a builder website using a real browser — handles JS-rendered sites.
+
+    Visits homepage → discovers contact pages → scrapes them all.
+    Returns (phones, emails).
+    """
+    browser = _get_browser()
+    if not browser or not website_url:
+        return [], []
+
+    all_phones = set()
+    all_emails = set()
+    visited = set()
+
+    try:
+        parsed = urlparse(website_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        return [], []
+
+    def _visit_and_extract(url):
+        """Visit a page with the browser and extract contacts from rendered HTML."""
+        normalized = url.rstrip("/").lower()
+        if normalized in visited:
+            return ""
+        visited.add(normalized)
+
+        page = None
+        try:
+            page = browser.new_page(
+                user_agent=WEB_UA,
+                viewport={"width": 1280, "height": 720},
+            )
+            page.set_default_timeout(15000)
+            page.goto(url, wait_until="domcontentloaded")
+            time.sleep(1)
+
+            # Scroll down to trigger lazy loading
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(0.5)
+
+            # Get fully rendered HTML
+            html = page.content()
+            phones, emails = _extract_contacts_from_html(html)
+            all_phones.update(phones)
+            all_emails.update(emails)
+            return html
+        except Exception as e:
+            log.debug(f"  Browser scrape failed for {url}: {e}")
+            return ""
+        finally:
+            if page:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+
+    static_paths = [
+        "/contact", "/contact-us", "/contact.html", "/contactus",
+        "/about", "/about-us", "/about.html",
+        "/our-team", "/team", "/locations", "/get-in-touch",
+    ]
+
+    # Phase 1: Homepage
+    log.info(f"  Browser scrape: {website_url}")
+    homepage_html = _visit_and_extract(website_url)
+
+    # Phase 2: Discover contact links from nav
+    if HAS_BS4 and homepage_html:
+        soup = BeautifulSoup(homepage_html, "html.parser")
+        contact_re = re.compile(r'contact|about|team|staff|our-team|get-in-touch|location|office', re.I)
+        base_host = (parsed.hostname or "").lower()
+        discovered = set()
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            text = a.get_text(" ", strip=True).lower()
+            if contact_re.search(text) or contact_re.search(href):
+                if href.startswith("/"):
+                    href = f"{base_url}{href}"
+                elif href.startswith("http"):
+                    try:
+                        if (urlparse(href).hostname or "").lower() != base_host:
+                            continue
+                    except Exception:
+                        continue
+                elif href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:"):
+                    continue
+                else:
+                    href = f"{base_url}/{href}"
+                discovered.add(href.rstrip("/"))
+        # Discovered links go first (higher priority)
+        static_paths = list(discovered) + [f"{base_url}{p}" for p in static_paths]
+
+    # Phase 3: Scrape additional pages (up to 8 more)
+    pages_scraped = 1
+    for page_url in static_paths:
+        if pages_scraped >= 8:
+            break
+        if all_phones and all_emails:
+            log.info(f"  Browser scrape: found phone + email, stopping early")
+            break
+        html = _visit_and_extract(page_url)
+        if html:
+            pages_scraped += 1
+
+    log.info(f"  Browser scrape: {pages_scraped} pages → {len(all_phones)} phone(s), {len(all_emails)} email(s)")
+    return list(all_phones), list(all_emails)
+
+
+# ─── Requests-Based Scraper (fallback if no browser) ────────────────────────
 
 def _discover_contact_links(html_text, base_url):
-    """Discover contact/about/team page links from navigation on the homepage."""
+    """Discover contact/about page links from navigation."""
     links = set()
     if not HAS_BS4 or not html_text:
         return links
     soup = BeautifulSoup(html_text, "html.parser")
     contact_patterns = re.compile(
-        r'contact|about|team|staff|our-team|get-in-touch|reach-us|connect|location|office',
-        re.I,
+        r'contact|about|team|staff|our-team|get-in-touch|reach-us|connect|location|office', re.I,
     )
     parsed_base = urlparse(base_url)
     base_host = parsed_base.hostname or ""
@@ -809,27 +900,25 @@ def _discover_contact_links(html_text, base_url):
                 href = f"{parsed_base.scheme}://{parsed_base.netloc}{href}"
             elif href.startswith("http"):
                 try:
-                    link_host = urlparse(href).hostname or ""
-                    if link_host.lower() != base_host.lower():
+                    if (urlparse(href).hostname or "").lower() != base_host.lower():
                         continue
                 except Exception:
                     continue
+            elif href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:"):
+                continue
             else:
-                if href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:"):
-                    continue
                 href = f"{parsed_base.scheme}://{parsed_base.netloc}/{href}"
             links.add(href.rstrip("/"))
     return links
 
 
-def scrape_website_contacts(session, website_url):
-    """Deep-scrape a builder website for phone/email across many pages."""
+def scrape_website_requests(session, website_url):
+    """Scrape a builder website using plain requests (fallback if no browser)."""
     if not website_url:
         return [], []
     all_phones = set()
     all_emails = set()
     visited = set()
-
     try:
         parsed = urlparse(website_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
@@ -838,23 +927,19 @@ def scrape_website_contacts(session, website_url):
 
     static_paths = [
         "/contact", "/contact-us", "/contact.html", "/contactus",
-        "/about", "/about-us", "/about.html", "/aboutus",
-        "/our-team", "/team", "/staff", "/people",
-        "/locations", "/get-in-touch", "/reach-us", "/connect",
-        "/footer", "/info",
+        "/about", "/about-us", "/about.html",
+        "/our-team", "/team", "/locations", "/get-in-touch",
     ]
 
-    def _fetch_and_extract(url):
+    def _fetch(url):
         normalized = url.rstrip("/").lower()
         if normalized in visited:
             return False, ""
         visited.add(normalized)
         try:
             resp = session.get(
-                url,
-                headers={"User-Agent": WEB_UA, "Accept": "text/html,application/xhtml+xml,*/*"},
-                timeout=12,
-                allow_redirects=True,
+                url, headers={"User-Agent": WEB_UA, "Accept": "text/html,*/*"},
+                timeout=12, allow_redirects=True,
             )
             if resp.status_code >= 400:
                 return False, ""
@@ -865,76 +950,119 @@ def scrape_website_contacts(session, website_url):
         except Exception:
             return False, ""
 
-    # Phase 1: Homepage
-    log.info(f"  Deep scrape: {website_url}")
+    log.info(f"  Requests scrape: {website_url}")
     homepage_html = ""
     try:
-        ok, homepage_html = _fetch_and_extract(website_url)
+        ok, homepage_html = _fetch(website_url)
     except Exception:
         pass
 
-    # Phase 2: Discover nav links
-    discovered_links = _discover_contact_links(homepage_html, base_url)
-
-    # Phase 3: Scrape discovered links + static paths (up to 12 pages)
-    pages_to_try = list(discovered_links) + [f"{base_url}{p}" for p in static_paths]
+    discovered = _discover_contact_links(homepage_html, base_url)
+    pages_to_try = list(discovered) + [f"{base_url}{p}" for p in static_paths]
     pages_scraped = 1
     for page_url in pages_to_try:
-        if pages_scraped >= 12:
-            break
-        if all_phones and all_emails:
+        if pages_scraped >= 12 or (all_phones and all_emails):
             break
         try:
-            ok, _ = _fetch_and_extract(page_url)
+            ok, _ = _fetch(page_url)
             if ok:
                 pages_scraped += 1
         except Exception:
             continue
 
-    log.info(f"  Deep scrape: {pages_scraped} pages → {len(all_phones)} phone(s), {len(all_emails)} email(s)")
+    log.info(f"  Requests scrape: {pages_scraped} pages → {len(all_phones)} phone(s), {len(all_emails)} email(s)")
     return list(all_phones), list(all_emails)
 
 
-# ─── Master Builder Lookup (coordinates all methods) ────────────────────────
+# ─── Master Builder Lookup ──────────────────────────────────────────────────
 
 def lookup_builder_web(session, company_name, city=None):
-    """Look up builder contact info. Tries Google Places first, then Bing + scrape.
+    """Look up builder contact info. Priority:
+    1. Google Places API (if key set — returns phone + website directly)
+    2. Playwright browser search + scrape (Railway/Docker — like original Puppeteer)
+    3. Requests-based DDG search + scrape (fallback)
 
     Returns: {"website": str|None, "phone": str|None, "email": str|None, "source": str}
     """
     log.info(f"Builder lookup: '{company_name}' in {city or 'SC'}")
 
-    # Method 1: Google Places API (best — returns phone + website directly)
+    # Method 1: Google Places API
     if GOOGLE_PLACES_KEY:
         gp = lookup_google_places(session, company_name, city=city)
-        if gp:
-            result = {
-                "website": gp.get("website"),
-                "phone": gp.get("phone"),
-                "email": None,
-                "source": "google_places",
-            }
-            # If we got a website but no phone/email, deep scrape it
-            if result["website"] and (not result["phone"] or not result["email"]):
-                phones, emails = scrape_website_contacts(session, result["website"])
-                if not result["phone"] and phones:
-                    result["phone"] = phones[0]
-                if not result["email"] and emails:
+        if gp and (gp.get("phone") or gp.get("website")):
+            result = {"website": gp.get("website"), "phone": gp.get("phone"), "email": None, "source": "google_places"}
+            # Scrape website for email if we got a URL
+            if result["website"] and not result["email"]:
+                _, emails = scrape_website_browser(result["website"]) if _get_browser() else scrape_website_requests(session, result["website"])
+                if emails:
                     result["email"] = emails[0]
-            log.info(f"  Result (Google): website={result['website']}, phone={result['phone']}, email={result['email']}")
+            log.info(f"  Result (Google): phone={result['phone']}, email={result['email']}, web={result['website']}")
             return result
 
-    # Method 2: DuckDuckGo HTML search → find website → deep scrape
-    website = find_company_website_search(session, company_name, city=city)
+    # Method 2: Browser search + browser scrape (Railway/Docker with Playwright)
+    if _get_browser():
+        website = find_company_website_browser(company_name, city=city)
+        if website:
+            phones, emails = scrape_website_browser(website)
+            result = {
+                "website": website,
+                "phone": phones[0] if phones else None,
+                "email": emails[0] if emails else None,
+                "source": "browser",
+            }
+            log.info(f"  Result (Browser): phone={result['phone']}, email={result['email']}, web={result['website']}")
+            return result
+        log.info(f"  Browser search found no website for '{company_name}'")
+
+    # Method 3: Requests-based fallback (DDG HTML + requests scrape)
+    log.info(f"  Falling back to requests-based search for '{company_name}'")
+    location = city or "South Carolina"
+    location = re.sub(r'^(City of|Town of|County of)\s+', '', location, flags=re.I)
+    query = f"{company_name} {location} SC builder"
+    website = None
+    try:
+        resp = session.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": WEB_UA, "Accept": "text/html,*/*"},
+            timeout=15,
+        )
+        if HAS_BS4 and resp.status_code in (200, 202):
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for a in soup.select("a.result__a"):
+                href = a.get("href", "")
+                if "uddg=" in href:
+                    from urllib.parse import parse_qs
+                    qs = parse_qs(urlparse(href).query)
+                    href = qs.get("uddg", [href])[0]
+                if "duckduckgo.com" in href or "y.js?" in href:
+                    continue
+                try:
+                    hostname = urlparse(href).hostname
+                    if not hostname:
+                        continue
+                    hostname = hostname.lower()
+                    if any(hostname == d or hostname.endswith("." + d) for d in SKIP_DOMAINS):
+                        continue
+                    if _domain_matches_company(hostname, company_name):
+                        website = href
+                        break
+                    if not website:
+                        website = href
+                except Exception:
+                    continue
+    except Exception as e:
+        log.warning(f"  DDG search failed: {e}")
+
     if website:
-        phones, emails = scrape_website_contacts(session, website)
+        phones, emails = scrape_website_requests(session, website)
         result = {
             "website": website,
             "phone": phones[0] if phones else None,
             "email": emails[0] if emails else None,
-            "source": "web_scrape",
+            "source": "requests",
         }
-        log.info(f"  Result (Bing): website={result['website']}, phone={result['phone']}, email={result['email']}")
+        log.info(f"  Result (Requests): phone={result['phone']}, email={result['email']}, web={result['website']}")
         return result
 
     log.info(f"  No results found for '{company_name}'")
@@ -1638,18 +1766,21 @@ def main():
     with btn_cols[4]:
         clear_btn = st.button("Clear All Data", use_container_width=True)
     with btn_cols[3]:
+        _has_browser = _get_browser() is not None
         if GOOGLE_PLACES_KEY:
-            st.markdown(
-                '<div style="text-align:center;padding:6px;font-size:.6rem;color:#4ADE80">'
-                'Google Places API active</div>',
-                unsafe_allow_html=True,
-            )
+            method_label = "Google Places API"
+            method_color = "#4ADE80"
+        elif _has_browser:
+            method_label = "Browser Search (Playwright)"
+            method_color = "#60A5FA"
         else:
-            st.markdown(
-                '<div style="text-align:center;padding:6px;font-size:.6rem;color:#F59E0B">'
-                'Set GOOGLE_PLACES_API_KEY for best results</div>',
-                unsafe_allow_html=True,
-            )
+            method_label = "Basic Search (limited)"
+            method_color = "#F59E0B"
+        st.markdown(
+            f'<div style="text-align:center;padding:6px;font-size:.55rem;color:{method_color}">'
+            f'Lookup: {method_label}</div>',
+            unsafe_allow_html=True,
+        )
     with btn_cols[5]:
         if st.button("Logout", use_container_width=True):
             st.session_state.authenticated = False
@@ -1685,7 +1816,12 @@ def main():
     if lookup_btn:
         st.session_state.clear_confirm = 0
         status_box = st.empty()
-        method = "Google Places API" if GOOGLE_PLACES_KEY else "Web Search + Site Scrape"
+        if GOOGLE_PLACES_KEY:
+            method = "Google Places API"
+        elif _get_browser():
+            method = "Browser Search + Scrape"
+        else:
+            method = "Web Search + Scrape"
         with st.spinner(f"Looking up builders via {method}..."):
             web_session = requests.Session()
             rows = conn.execute(
