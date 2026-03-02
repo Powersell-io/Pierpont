@@ -215,8 +215,42 @@ def map_entity(entity):
     }
 
 
+def _is_building_permit(entity):
+    """
+    Filter to find the actual HOME BUILDING permit, not plumbing/electric/mechanical.
+    Matches the original Node.js logic from charleston.js lines 348-358.
+    """
+    case_type = (entity.get("CaseType") or "").lower()
+    case_num = (entity.get("CaseNumber") or "").upper()
+    # Must be an actual permit (CaseType contains "permit"), not an inspection
+    if "permit" not in case_type:
+        return False
+    # Must be a BUILDING permit — not plumbing, electrical, mechanical, etc.
+    if "building" not in case_type:
+        return False
+    # Skip sub-trade permits that happen to have "building" in a weird way
+    for skip in ("plumbing", "electrical", "mechanical", "hvac", "heating",
+                 "fire", "sprinkler", "roofing", "demolition", "sign",
+                 "grading", "zoning", "fence"):
+        if skip in case_type:
+            return False
+    # Skip if case number looks like an inspection
+    if case_num.startswith("INS-") or case_num.startswith("INSP-"):
+        return False
+    return True
+
+
 def enrich_permit(session, permit):
-    """Search for building permit by address to get value + contacts."""
+    """
+    Search for the BUILDING permit by address to get value + builder contacts.
+
+    Flow (matches original Node.js charleston.js):
+    1. Search EnerGov by address for ALL permits at that address
+    2. Filter to find the actual residential BUILDING permit (not plumbing/electric/etc.)
+    3. Get permit detail (project value)
+    4. Get contacts from building permit (the Applicant = the home builder)
+    5. Store all contacts + linked permit info in raw_data for the detail view
+    """
     address = permit.get("address")
     if not address:
         return permit
@@ -227,23 +261,58 @@ def enrich_permit(session, permit):
         result = resp.json()
         if not result.get("Success") or not result.get("Result", {}).get("EntityResults"):
             return enriched
+
         entities = result["Result"]["EntityResults"]
-        building_permits = [
-            e for e in entities
-            if "permit" in (e.get("CaseType") or "").lower()
-            and "building" in (e.get("CaseType") or "").lower()
+
+        # Log all permit types found at this address for debugging
+        all_types = [
+            f"{e.get('CaseType')}/{e.get('CaseNumber')}"
+            for e in entities[:10]
         ]
+        log.info(f"  Address '{address}': {len(entities)} results, types: {', '.join(all_types)}")
+
+        # Filter to ONLY actual building permits (not plumbing, electrical, etc.)
+        building_permits = [e for e in entities if _is_building_permit(e)]
+
         if not building_permits:
+            log.info(f"  No building permits at {address} (found {len(entities)} other permits)")
+            # Store all permit types for the detail view even if no building permit
+            try:
+                raw = json.loads(enriched.get("raw_data") or "{}")
+                raw["_allPermitTypes"] = [
+                    {"type": e.get("CaseType"), "number": e.get("CaseNumber"),
+                     "value": e.get("ProjectValue") or e.get("EstimatedValue")}
+                    for e in entities[:20]
+                ]
+                raw["_dataSource"] = "no_building_permit"
+                enriched["raw_data"] = json.dumps(raw)
+            except Exception:
+                pass
             return enriched
-        best = max(building_permits, key=lambda e: float(e.get("ProjectValue") or e.get("EstimatedValue") or 0))
+
+        log.info(
+            f"  Found {len(building_permits)} building permit(s): "
+            + ", ".join(
+                f"{e.get('CaseType')}/{e.get('CaseWorkclass')} [{e.get('CaseNumber')}] "
+                f"val={e.get('ProjectValue') or e.get('EstimatedValue') or '?'}"
+                for e in building_permits
+            )
+        )
+
+        # Pick the building permit with the highest value
+        best = max(
+            building_permits,
+            key=lambda e: float(e.get("ProjectValue") or e.get("EstimatedValue") or 0),
+        )
         case_id = best.get("CaseId")
         if not case_id:
             return enriched
+
         # Get permit detail for value
         detail_resp = session.post(
             PERMIT_DETAIL_API,
             json={"EntityId": case_id, "ModuleId": 1},
-            headers=TENANT_HEADERS, timeout=30
+            headers=TENANT_HEADERS, timeout=30,
         )
         detail = detail_resp.json()
         p = detail.get("Result", {}) if detail.get("Success") else {}
@@ -253,13 +322,20 @@ def enrich_permit(session, permit):
                 enriched["project_value"] = float(str(raw_val).replace(",", "").replace("$", ""))
             except Exception:
                 pass
-        enriched["permit_type"] = p.get("WorkClassName") or best.get("CaseWorkclass") or enriched.get("permit_type")
+        enriched["permit_type"] = (
+            p.get("WorkClassName") or best.get("CaseWorkclass") or enriched.get("permit_type")
+        )
         enriched["permit_issue_date"] = parse_energov_date(
             p.get("IssueDate") or p.get("ApplyDate")
         ) or enriched.get("permit_issue_date")
         linked_num = p.get("PermitNumber") or best.get("CaseNumber")
 
-        # Get contacts from building permit
+        log.info(
+            f"  Building permit {linked_num}: Value=${enriched.get('project_value', '?'):,.0f}, "
+            f"Type={enriched.get('permit_type')}"
+        )
+
+        # Get contacts from the BUILDING permit (ModuleId=1 = permits)
         contacts_resp = session.post(
             CONTACTS_API,
             json={
@@ -270,14 +346,25 @@ def enrich_permit(session, permit):
             headers=TENANT_HEADERS, timeout=30,
         )
         contacts_data = contacts_resp.json()
-        contacts = contacts_data.get("Result", []) if isinstance(contacts_data.get("Result"), list) else []
+        contacts = (
+            contacts_data.get("Result", [])
+            if isinstance(contacts_data.get("Result"), list)
+            else []
+        )
+
         all_contacts = []
+        applicant_name = None
+        applicant_company = None
+        contractors = []
+        owner = None
+
         for c in contacts:
             ctype = (c.get("ContactTypeName") or "").lower()
             name = " ".join(filter(None, [c.get("FirstName"), c.get("LastName")]))
             company = c.get("GlobalEntityName")
             phone = c.get("Phone") or c.get("CellPhone") or c.get("HomePhone") or ""
             email = c.get("Email") or ""
+
             all_contacts.append({
                 "name": name,
                 "company": company or "",
@@ -285,26 +372,55 @@ def enrich_permit(session, permit):
                 "phone": phone,
                 "email": email,
             })
-            if "applicant" in ctype or "contractor" in ctype or "builder" in ctype:
-                if not enriched.get("builder_name") and name:
-                    enriched["builder_name"] = name
-                if not enriched.get("builder_company") and company:
-                    enriched["builder_company"] = company
+
+            # Applicant on the BUILDING permit = the home builder (not plumber/electrician)
+            if "applicant" in ctype:
+                if not applicant_name and name:
+                    applicant_name = name
+                if not applicant_company and company:
+                    applicant_company = company
+                # Grab their phone/email
+                if not enriched.get("builder_phone") and phone:
+                    enriched["builder_phone"] = phone
+                if not enriched.get("builder_email") and email:
+                    enriched["builder_email"] = email
+            elif "contractor" in ctype or "builder" in ctype:
+                contractors.append({"name": name, "company": company})
                 if not enriched.get("builder_phone") and phone:
                     enriched["builder_phone"] = phone
                 if not enriched.get("builder_email") and email:
                     enriched["builder_email"] = email
             elif "owner" in ctype:
-                if not enriched.get("owner_name") and name:
-                    enriched["owner_name"] = name
+                if not owner and name:
+                    owner = name
 
-        # Store linked permit info and contacts in raw_data
+        # Set builder = applicant first, then contractor fallback
+        enriched["builder_name"] = applicant_name or (contractors[0]["name"] if contractors else None) or enriched.get("builder_name")
+        enriched["builder_company"] = applicant_company or (contractors[0]["company"] if contractors else None) or enriched.get("builder_company")
+        if owner:
+            enriched["owner_name"] = owner
+
+        log.info(
+            f"  Contacts: builder={enriched.get('builder_name', '?')} "
+            f"@ {enriched.get('builder_company', '?')}, "
+            f"phone={enriched.get('builder_phone', '?')}, "
+            f"email={enriched.get('builder_email', '?')}, "
+            f"owner={enriched.get('owner_name', '?')}"
+        )
+
+        # Store linked permit info and ALL contacts in raw_data for detail view
         try:
             raw = json.loads(enriched.get("raw_data") or "{}")
             raw["_linkedPermit"] = linked_num
             raw["_linkedPermitUrl"] = f"{ENERGOV_BASE}#/permitDetail/permit/{case_id}"
             raw["_allContacts"] = all_contacts
+            raw["_contractors"] = contractors
             raw["_dataSource"] = "building_permit"
+            raw["_allPermitTypes"] = [
+                {"type": e.get("CaseType"), "number": e.get("CaseNumber"),
+                 "value": e.get("ProjectValue") or e.get("EstimatedValue")}
+                for e in entities[:20]
+            ]
             enriched["raw_data"] = json.dumps(raw)
         except Exception:
             pass
@@ -846,11 +962,15 @@ def inject_css():
     .empty-cell { color:rgba(148,163,184,0.4); }
 
     /* ── Detail Expand Row ── */
-    details.permit-detail { margin:0; }
+    details.permit-detail { margin:0; border-bottom:1px solid rgba(255,255,255,0.04); }
     details.permit-detail summary {
-        list-style:none; cursor:pointer; display:contents;
+        list-style:none; cursor:pointer;
     }
     details.permit-detail summary::-webkit-details-marker { display:none; }
+    details.permit-detail summary::marker { display:none; content:''; }
+    details.permit-detail:hover { background:rgba(43,108,176,0.04); }
+    details.permit-detail[open] { background:rgba(43,108,176,0.03); }
+    details.permit-detail[open] summary { border-bottom:1px solid rgba(43,108,176,0.1); }
     .detail-panel {
         background: rgba(43,108,176,0.04);
         border-top: 1px solid rgba(43,108,176,0.1);
@@ -1509,74 +1629,78 @@ def main():
             unsafe_allow_html=True,
         )
 
-        # Build table rows with expandable detail sections
-        rows_html = ""
+        # Build each permit as a <details> card — pure HTML, no JavaScript needed
+        # (Streamlit Cloud blocks inline onclick handlers)
+        def _phone_link(num):
+            if not num:
+                return '<span class="empty-cell">&mdash;</span>'
+            return (
+                f'<a href="tel:{esc(num)}" style="color:#60A5FA;text-decoration:none;'
+                f'font-family:Fira Code,monospace;font-size:.75rem;white-space:nowrap">{esc(num)}</a>'
+            )
+
+        def _email_link(addr):
+            if not addr:
+                return '<span class="empty-cell">&mdash;</span>'
+            return f'<a href="mailto:{esc(addr)}" style="color:#60A5FA;text-decoration:none;font-size:.75rem">{esc(addr)}</a>'
+
+        cards_html = ""
         for p in result["data"]:
             is_hv = p.get("project_value") and p["project_value"] >= 300000
-            hv_cls = ' class="hv"' if is_hv else ""
-            val_style = "color:#2B6CB0;" if is_hv else ""
+            hv_border = "border-left:3px solid #2B6CB0;" if is_hv else ""
+            val_style = "color:#2B6CB0;" if is_hv else "color:#E2E8F0;"
 
             bn = p.get("builder_name") or ""
             bc = p.get("builder_company") or ""
             if bn and bc:
-                builder = (
-                    f'<div style="font-weight:500;color:#F8FAFC">{esc(bn)}</div>'
-                    f'<div style="font-size:.65rem;color:#94A3B8">{esc(bc)}</div>'
-                )
+                builder = f'{esc(bn)} <span style="color:#94A3B8;font-size:.75rem">@ {esc(bc)}</span>'
             elif bn or bc:
-                builder = f'<span style="font-weight:500;color:#F8FAFC">{esc(bn or bc)}</span>'
+                builder = esc(bn or bc)
             else:
                 builder = '<span class="empty-cell">&mdash;</span>'
 
-            def _phone_link(num):
-                if not num:
-                    return '<span class="empty-cell">&mdash;</span>'
-                return (
-                    f'<a href="tel:{esc(num)}" style="color:#60A5FA;text-decoration:none;'
-                    f'font-family:Fira Code,monospace;font-size:.7rem;white-space:nowrap">{esc(num)}</a>'
-                )
-
-            def _email_link(addr):
-                if not addr:
-                    return '<span class="empty-cell">&mdash;</span>'
-                return f'<a href="mailto:{esc(addr)}" style="color:#60A5FA;text-decoration:none;font-size:.7rem">{esc(addr)}</a>'
-
-            biz_ph = _phone_link(p.get("builder_phone"))
-            biz_em = _email_link(p.get("builder_email"))
-            per_ph = _phone_link(p.get("personal_phone"))
-            per_em = _email_link(p.get("personal_email"))
-
             addr_esc = esc(p.get("address") or "") or "&mdash;"
             muni_esc = esc(p.get("municipality") or "") or "&mdash;"
-            owner_esc = esc(p.get("owner_name") or "") or "&mdash;"
             value_html = fmt_money(p.get("project_value"))
-            date_html = fmt_date(p.get("inspection_date"))
             score_html = score_badge(p.get("opportunity_score"))
             status_html = status_badge(p.get("inspection_status"))
-            pnum_esc = esc(p.get("permit_number") or "") or "&mdash;"
+            date_html = fmt_date(p.get("inspection_date"))
 
-            # Build detail panel
+            # Summary row (always visible)
+            summary_html = (
+                f'<div style="display:grid;grid-template-columns:2fr 1fr 1.5fr 1fr 1fr;gap:8px;'
+                f'align-items:center;padding:12px 16px;font-size:.82rem">'
+                f'<div style="color:#F8FAFC;font-weight:500;overflow:hidden;text-overflow:ellipsis;'
+                f'white-space:nowrap" title="{addr_esc}">{addr_esc}</div>'
+                f'<div style="color:#94A3B8;font-size:.72rem">{muni_esc}</div>'
+                f'<div>{builder}</div>'
+                f'<div style="text-align:right;font-family:Fira Code,monospace;font-size:.78rem;{val_style}">{value_html}</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">{status_html} {score_html}</div>'
+                f'</div>'
+            )
+
+            # Expanded detail panel
             detail_html = build_detail_panel(p)
 
-            rows_html += (
-                f"<tr{hv_cls} style='cursor:pointer' onclick=\""
-                f"var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none'\">"
-                f"<td style='color:#F8FAFC;font-weight:500;max-width:180px'>"
-                f"<div style='overflow:hidden;text-overflow:ellipsis;white-space:nowrap' title='{addr_esc}'>{addr_esc}</div></td>"
-                f"<td style='color:#94A3B8;font-size:.7rem'>{muni_esc}</td>"
-                f"<td>{builder}</td>"
-                f"<td>{biz_ph}</td>"
-                f"<td>{biz_em}</td>"
-                f"<td>{per_ph}</td>"
-                f"<td>{per_em}</td>"
-                f"<td style='color:#E2E8F0'>{owner_esc}</td>"
-                f"<td style='text-align:right;font-family:Fira Code,monospace;font-size:.75rem;{val_style}'>{value_html}</td>"
-                f"<td style='font-family:Fira Code,monospace;font-size:.7rem;color:#E2E8F0'>{date_html}</td>"
-                f"<td style='text-align:center'>{status_html}</td>"
-                f"<td style='text-align:center'>{score_html}</td>"
-                f"<td style='font-family:Fira Code,monospace;font-size:.65rem;color:#94A3B8'>{pnum_esc}</td>"
-                f"</tr>"
-                f"<tr style='display:none'><td colspan='13' style='padding:0;border:none'>{detail_html}</td></tr>"
+            # Website from DB
+            bw = p.get("builder_website") or ""
+            website_html = ""
+            if bw:
+                try:
+                    host = urlparse(bw).hostname or bw
+                    host = host.replace("www.", "")
+                except Exception:
+                    host = bw
+                website_html = (
+                    f'<div class="detail-field"><div class="detail-label">Website</div>'
+                    f'<div class="detail-value"><a href="{esc(bw)}" target="_blank">{esc(host)}</a></div></div>'
+                )
+
+            cards_html += (
+                f'<details class="permit-detail" style="border-bottom:1px solid rgba(255,255,255,0.04);{hv_border}">'
+                f'<summary style="cursor:pointer;list-style:none">{summary_html}</summary>'
+                f'{detail_html}'
+                f'</details>'
             )
 
         watermark = ""
@@ -1586,22 +1710,26 @@ def main():
                 f"background-size:contain;opacity:0.06;"
             )
 
-        table_html = (
-            f'<div style="overflow-x:auto;border-radius:16px;border:1px solid rgba(255,255,255,0.08);'
-            f'background:rgba(255,255,255,0.02);position:relative">'
+        # Column headers
+        header_html = (
+            f'<div style="display:grid;grid-template-columns:2fr 1fr 1.5fr 1fr 1fr;gap:8px;'
+            f'padding:12px 16px;font-size:.6rem;font-weight:600;text-transform:uppercase;'
+            f'letter-spacing:.08em;color:#94A3B8;background:rgba(15,23,42,0.5);'
+            f'border-bottom:1px solid rgba(255,255,255,0.06)">'
+            f'<div>Address</div><div>Municipality</div><div>Builder</div>'
+            f'<div style="text-align:right">Value</div><div style="text-align:right">Status / Score</div>'
+            f'</div>'
+        )
+
+        full_html = (
+            f'<div style="border-radius:16px;border:1px solid rgba(255,255,255,0.08);'
+            f'background:rgba(255,255,255,0.02);position:relative;overflow:hidden">'
             f'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);'
             f'width:400px;height:400px;{watermark}pointer-events:none;z-index:0"></div>'
-            f'<table class="permit-table" style="position:relative;z-index:1"><thead><tr>'
-            f'<th>Address</th><th>Municipality</th><th>Builder</th>'
-            f'<th>Biz Phone</th><th>Biz Email</th>'
-            f'<th>Personal Phone</th><th>Personal Email</th>'
-            f'<th>Owner</th>'
-            f'<th style="text-align:right">Value</th><th>Date</th>'
-            f'<th style="text-align:center">Status</th><th style="text-align:center">Score</th>'
-            f'<th>Permit #</th>'
-            f'</tr></thead><tbody>{rows_html}</tbody></table></div>'
+            f'<div style="position:relative;z-index:1">'
+            f'{header_html}{cards_html}</div></div>'
         )
-        st.markdown(table_html, unsafe_allow_html=True)
+        st.markdown(full_html, unsafe_allow_html=True)
 
         # Pagination
         if result["total_pages"] > 1:
