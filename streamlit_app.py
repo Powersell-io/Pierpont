@@ -2003,22 +2003,17 @@ def main():
         st.markdown(chips_html, unsafe_allow_html=True)
 
     # ── Profit Margin Input ──
-    st.markdown(
-        '<div style="margin-bottom:4px;font-size:.7rem;font-weight:600;text-transform:uppercase;'
-        'letter-spacing:.06em;color:#94A3B8">Profit Calculator</div>',
-        unsafe_allow_html=True,
-    )
     margin_col1, margin_col2 = st.columns([1, 5])
     with margin_col1:
         margin_pct = st.number_input(
-            "Target Net Profit Margin (%)", min_value=0, max_value=100, value=15,
+            "Margin %", min_value=0, max_value=100, value=15,
             step=1, key="margin_pct", label_visibility="collapsed",
         )
     with margin_col2:
         st.markdown(
             f'<div style="padding:8px 0;font-size:.78rem;color:#94A3B8">'
-            f'Target Net Profit Margin: <strong style="color:#4ADE80">{margin_pct}%</strong> '
-            f'&mdash; Drywall revenue &amp; profit opportunity update live below</div>',
+            f'Profit Margin: <strong style="color:#4ADE80">{margin_pct}%</strong> '
+            f'&mdash; Profit estimates update live in the table</div>',
             unsafe_allow_html=True,
         )
 
@@ -2109,9 +2104,8 @@ def main():
             hv_border = "border-left:3px solid #2B6CB0;" if is_hv else ""
             val_color = "color:#2B6CB0;" if is_hv else "color:#E2E8F0;"
 
-            # Profit calculations (live based on margin input)
+            # Profit estimate (live based on margin input)
             profit = calculate_drywall_profit(pv, margin_pct)
-            drywall_html = fmt_money(profit["drywall_revenue"]) if pv else "&mdash;"
             profit_html = fmt_money(profit["profit_opportunity"]) if pv else "&mdash;"
 
             bn = p.get("builder_name") or ""
@@ -2133,31 +2127,20 @@ def main():
             web_email = _email_link(p.get("builder_email"))
             web_phone = _phone_link(p.get("builder_phone"))
 
-            # Summary row — all key columns visible
+            # Summary row columns: Address | City | Builder | Website | Email | Phone | Value | Profit Est | Score
             summary_html = (
                 f'<div style="display:grid;'
-                f'grid-template-columns:1.8fr 0.8fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.6fr 0.7fr 0.5fr;'
+                f'grid-template-columns:2fr 0.8fr 1.4fr 1fr 1fr 0.9fr 0.7fr 0.7fr 0.5fr;'
                 f'gap:6px;align-items:center;padding:10px 14px;font-size:.76rem">'
-                # Address
                 f'<div style="color:#F8FAFC;font-weight:500;overflow:hidden;text-overflow:ellipsis;'
                 f'white-space:nowrap" title="{addr_esc}">{addr_esc}</div>'
-                # City
                 f'<div style="color:#94A3B8;font-size:.68rem">{muni_esc}</div>'
-                # Builder
                 f'<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{builder_text}</div>'
-                # Website
                 f'<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{web_link}</div>'
-                # Web Email
                 f'<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{web_email}</div>'
-                # Web Phone
                 f'<div>{web_phone}</div>'
-                # Value
                 f'<div style="text-align:right;font-family:Fira Code,monospace;font-size:.72rem;{val_color}">{fmt_money(pv)}</div>'
-                # Profit Opportunity
                 f'<div style="text-align:right;font-family:Fira Code,monospace;font-size:.72rem;color:#4ADE80">{profit_html}</div>'
-                # Date
-                f'<div style="font-family:Fira Code,monospace;font-size:.65rem;color:#94A3B8">{date_html}</div>'
-                # Score
                 f'<div style="text-align:center">{score_html}</div>'
                 f'</div>'
             )
@@ -2165,37 +2148,33 @@ def main():
             # Expanded detail panel with ALL data
             detail_fields = build_detail_panel(p)
 
-            # Add profit calculator fields to expanded view
+            # Profit section in expanded view — just value + profit estimate
             profit_detail = (
                 f'<div class="detail-panel" style="border-top:1px solid rgba(43,108,176,0.15);'
                 f'background:rgba(34,197,94,0.03)">'
                 f'<div class="detail-field"><div class="detail-label">Permit Value</div>'
                 f'<div class="detail-value" style="font-family:Fira Code,monospace">{fmt_money(pv)}</div></div>'
-                f'<div class="detail-field"><div class="detail-label">Drywall % (log scale)</div>'
-                f'<div class="detail-value" style="font-family:Fira Code,monospace">'
-                f'{profit["drywall_pct"]*100:.1f}%</div></div>'
-                f'<div class="detail-field"><div class="detail-label">Est. Drywall Revenue</div>'
-                f'<div class="detail-value" style="font-family:Fira Code,monospace;color:#60A5FA">'
-                f'{fmt_money(profit["drywall_revenue"])}</div></div>'
-                f'<div class="detail-field"><div class="detail-label">Profit Opportunity ({margin_pct}%)</div>'
+                f'<div class="detail-field"><div class="detail-label">Profit Estimate ({margin_pct}%)</div>'
                 f'<div class="detail-value" style="font-family:Fira Code,monospace;color:#4ADE80;font-weight:700">'
                 f'{fmt_money(profit["profit_opportunity"])}</div></div>'
             )
-            # Personal phone/email placeholders
-            per_ph = p.get("personal_phone") or ""
-            per_em = p.get("personal_email") or ""
-            profit_detail += (
-                f'<div class="detail-field"><div class="detail-label">Personal Phone</div>'
-                f'<div class="detail-value">{_phone_link(per_ph) if per_ph else "<span style=&quot;color:#64748B;font-size:.7rem&quot;>Future API integration</span>"}</div></div>'
-                f'<div class="detail-field"><div class="detail-label">Personal Email</div>'
-                f'<div class="detail-value">{_email_link(per_em) if per_em else "<span style=&quot;color:#64748B;font-size:.7rem&quot;>Future API integration</span>"}</div></div>'
-            )
-            # Website in detail
             if bw:
                 profit_detail += (
                     f'<div class="detail-field"><div class="detail-label">Builder Website</div>'
                     f'<div class="detail-value"><a href="{esc(bw)}" target="_blank" '
                     f'style="color:#60A5FA">{esc(bw)}</a></div></div>'
+                )
+            per_ph = p.get("personal_phone") or ""
+            per_em = p.get("personal_email") or ""
+            if per_ph:
+                profit_detail += (
+                    f'<div class="detail-field"><div class="detail-label">Personal Phone</div>'
+                    f'<div class="detail-value">{_phone_link(per_ph)}</div></div>'
+                )
+            if per_em:
+                profit_detail += (
+                    f'<div class="detail-field"><div class="detail-label">Personal Email</div>'
+                    f'<div class="detail-value">{_email_link(per_em)}</div></div>'
                 )
             profit_detail += '</div>'
 
@@ -2216,15 +2195,15 @@ def main():
         # Column headers matching summary grid
         header_html = (
             f'<div style="display:grid;'
-            f'grid-template-columns:1.8fr 0.8fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.6fr 0.7fr 0.5fr;'
+            f'grid-template-columns:2fr 0.8fr 1.4fr 1fr 1fr 0.9fr 0.7fr 0.7fr 0.5fr;'
             f'gap:6px;padding:10px 14px;font-size:.55rem;font-weight:600;text-transform:uppercase;'
             f'letter-spacing:.07em;color:#94A3B8;background:rgba(15,23,42,0.5);'
             f'border-bottom:1px solid rgba(255,255,255,0.06)">'
             f'<div>Address</div><div>City</div><div>Builder</div>'
-            f'<div>Website</div><div>Web Email</div><div>Web Phone</div>'
+            f'<div>Website</div><div>Email</div><div>Phone</div>'
             f'<div style="text-align:right">Value</div>'
-            f'<div style="text-align:right">Profit Opp</div>'
-            f'<div>Date</div><div style="text-align:center">Score</div>'
+            f'<div style="text-align:right">Profit Est</div>'
+            f'<div style="text-align:center">Score</div>'
             f'</div>'
         )
 
