@@ -244,6 +244,7 @@ async function queryPermits(params = {}) {
 }
 
 async function getPermitById(id) { await getDb(); return queryOne('SELECT * FROM permits WHERE id = ?', [id]); }
+async function getPermitByNumber(permitNumber) { await getDb(); return queryOne('SELECT * FROM permits WHERE permit_number = ?', [permitNumber]); }
 
 async function getStats(params = {}) {
   await getDb();
@@ -367,4 +368,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };

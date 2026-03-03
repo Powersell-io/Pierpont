@@ -3,7 +3,7 @@
 const config = require('../config');
 const db = require('../db/init');
 const utils = require('./utils');
-const { lookupBuilder } = require('./builderLookup');
+const { lookupBuilder, launchBrowser } = require('./builderLookup');
 
 // Import all portal scrapers
 const citizenserve = require('./portals/citizenserve');
@@ -137,56 +137,57 @@ async function runAllScrapers(options = {}) {
     await utils.delay(config.scraper.requestDelayMs);
   }
 
-  // ── Auto-crawl builder websites ──
-  const companiesLookedUp = new Set();
-  const permitsNeedingLookup = allPermits.filter(p => {
+  // ── Auto-crawl builder websites (uses ONE shared browser to avoid OOM) ──
+  const companyMap = new Map();
+  for (const p of allPermits) {
     const company = (p.builder_company || '').trim();
-    return company && !companiesLookedUp.has(company);
-  });
+    if (!company) continue;
+    if (!companyMap.has(company)) companyMap.set(company, []);
+    companyMap.get(company).push(p);
+  }
 
-  if (permitsNeedingLookup.length > 0) {
-    // Deduplicate by company
-    const companyMap = new Map();
-    for (const p of allPermits) {
-      const company = (p.builder_company || '').trim();
-      if (!company || companiesLookedUp.has(company)) continue;
-      if (!companyMap.has(company)) companyMap.set(company, []);
-      companyMap.get(company).push(p);
-    }
-
-    const uniqueCompanies = [...companyMap.keys()];
+  const uniqueCompanies = [...companyMap.keys()];
+  if (uniqueCompanies.length > 0) {
     utils.log(`\n🔍 Auto-crawling ${uniqueCompanies.length} builder websites...`);
     currentRun.current_municipality = 'Builder Lookup';
 
+    let lookupBrowser;
     let lookupFound = 0;
-    for (const company of uniqueCompanies) {
-      companiesLookedUp.add(company);
-      try {
-        const result = await lookupBuilder(company);
-        if (result.website) {
-          lookupFound++;
-          const permits = companyMap.get(company);
-          for (const permit of permits) {
-            const updates = {};
-            if (result.phone) updates.phone = result.phone;
-            if (result.email) updates.email = result.email;
-            if (result.website) updates.website = result.website;
-            if (Object.keys(updates).length > 0) {
-              const dbPermit = await db.getPermitById(permit.id || 0);
-              if (!dbPermit) {
-                // Look up by permit number instead
-                const all = await db.queryPermits({ search: permit.permit_number, per_page: 1 });
-                if (all.data.length > 0) await db.updateBuilderContact(all.data[0].id, updates);
-              } else {
-                await db.updateBuilderContact(dbPermit.id, updates);
+    try {
+      lookupBrowser = await launchBrowser();
+      utils.log('[BuilderLookup] Shared browser launched for auto-crawl');
+
+      for (const company of uniqueCompanies) {
+        try {
+          const result = await lookupBuilder(company, lookupBrowser);
+          if (result.website) {
+            lookupFound++;
+            const permits = companyMap.get(company);
+            for (const permit of permits) {
+              const updates = {};
+              if (result.phone) updates.phone = result.phone;
+              if (result.email) updates.email = result.email;
+              if (result.website) updates.website = result.website;
+              if (Object.keys(updates).length > 0) {
+                // Look up the DB record by permit_number (raw scraper objects don't have DB id)
+                const dbRow = await db.getPermitByNumber(permit.permit_number);
+                if (dbRow) {
+                  await db.updateBuilderContact(dbRow.id, updates);
+                } else {
+                  utils.log(`⚠️  Could not find DB record for permit ${permit.permit_number}`);
+                }
               }
             }
           }
+          await utils.delay(2000);
+        } catch (err) {
+          utils.log(`⚠️  Builder lookup failed for "${company}": ${err.message}`);
         }
-        await utils.delay(2000); // Rate limit
-      } catch (err) {
-        utils.log(`⚠️  Builder lookup failed for "${company}": ${err.message}`);
       }
+    } catch (err) {
+      utils.log(`⚠️  Builder lookup browser error: ${err.message}`);
+    } finally {
+      if (lookupBrowser) try { await lookupBrowser.close(); } catch {}
     }
     utils.log(`✅ Builder lookup complete: ${lookupFound}/${uniqueCompanies.length} websites found`);
   }
