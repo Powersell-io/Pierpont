@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { calculateOpportunityScore } = require('../scraper/utils');
+const builderCache = require('../scraper/builder-cache');
 
 let db;
 let dbReady;
@@ -110,6 +111,18 @@ function initSchema() {
   saveToFile();
 }
 
+// ─── Builder exclusion filter ────────────────────────────────────────────────
+function isExcludedBuilder(builderName, builderCompany) {
+  const excluded = config.excludedBuilders || [];
+  if (excluded.length === 0) return false;
+  const check = (val) => {
+    if (!val) return false;
+    const lower = val.toLowerCase();
+    return excluded.some(pattern => lower.includes(pattern.toLowerCase()));
+  };
+  return check(builderName) || check(builderCompany);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const clean = (v) => (v === undefined || v === null || v === '') ? null : String(v);
 const cleanNum = (v) => {
@@ -160,6 +173,7 @@ async function upsertPermit(permit) {
     permit_issue_date: clean(permit.permit_issue_date),
     source_url: clean(permit.source_url),
     raw_data: permit.raw_data ? (typeof permit.raw_data === 'string' ? permit.raw_data : JSON.stringify(permit.raw_data)) : null,
+    builder_website: clean(permit.builder_website),
   };
 
   if (!p.permit_number) {
@@ -173,6 +187,22 @@ async function upsertPermit(permit) {
     return { action: 'skipped', reason: 'address is a form label' };
   }
 
+  // Filter out excluded builders (national/production builders)
+  if (isExcludedBuilder(p.builder_name, p.builder_company)) {
+    return { action: 'skipped', reason: 'excluded builder' };
+  }
+
+  // Auto-populate contact info from builder cache
+  const companyKey = p.builder_company || p.builder_name;
+  if (companyKey) {
+    const cached = builderCache.get(companyKey);
+    if (cached) {
+      if (!p.builder_phone && cached.phone) p.builder_phone = cached.phone;
+      if (!p.builder_email && cached.email) p.builder_email = cached.email;
+      if (!p.builder_website && cached.website) p.builder_website = cached.website;
+    }
+  }
+
   // Calculate opportunity score
   const { score } = calculateOpportunityScore({
     project_value: p.project_value,
@@ -184,12 +214,12 @@ async function upsertPermit(permit) {
   const existing = queryOne('SELECT id FROM permits WHERE permit_number = ?', [p.permit_number]);
 
   if (existing) {
-    execute(`UPDATE permits SET address=?,municipality=?,builder_name=?,builder_company=?,builder_phone=?,builder_email=?,applicant_name=?,applicant_phone=?,applicant_email=?,owner_name=?,project_value=?,permit_type=?,inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=?,source_url=?,scraped_at=datetime('now'),raw_data=?,opportunity_score=? WHERE permit_number=?`,
-      [p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.permit_number]);
+    execute(`UPDATE permits SET address=?,municipality=?,builder_name=?,builder_company=?,builder_phone=?,builder_email=?,builder_website=?,applicant_name=?,applicant_phone=?,applicant_email=?,owner_name=?,project_value=?,permit_type=?,inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=?,source_url=?,scraped_at=datetime('now'),raw_data=?,opportunity_score=? WHERE permit_number=?`,
+      [p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.permit_number]);
     return { action: 'updated', id: existing.id };
   } else {
-    execute(`INSERT INTO permits (permit_number,address,municipality,builder_name,builder_company,builder_phone,builder_email,applicant_name,applicant_phone,applicant_email,owner_name,project_value,permit_type,inspection_type,inspection_date,inspection_status,permit_issue_date,source_url,raw_data,opportunity_score) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [p.permit_number, p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score]);
+    execute(`INSERT INTO permits (permit_number,address,municipality,builder_name,builder_company,builder_phone,builder_email,builder_website,applicant_name,applicant_phone,applicant_email,owner_name,project_value,permit_type,inspection_type,inspection_date,inspection_status,permit_issue_date,source_url,raw_data,opportunity_score) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [p.permit_number, p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score]);
     const row = queryOne('SELECT last_insert_rowid() as id');
     return { action: 'inserted', id: row ? row.id : null };
   }
@@ -226,6 +256,14 @@ async function queryPermits(params = {}) {
     } else {
       conditions.push('1=0'); // no municipalities in range
     }
+  }
+
+  // Exclude production/national builders
+  const excluded = config.excludedBuilders || [];
+  if (excluded.length > 0) {
+    const clauses = excluded.map(() => `(COALESCE(builder_name,'') NOT LIKE ? AND COALESCE(builder_company,'') NOT LIKE ?)`);
+    conditions.push(clauses.join(' AND '));
+    for (const name of excluded) { values.push(`%${name}%`, `%${name}%`); }
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -279,6 +317,13 @@ async function getAllPermitsForExport(params = {}) {
       cond.push(`municipality IN (${withinRange.map(() => '?').join(',')})`);
       vals.push(...withinRange);
     } else { cond.push('1=0'); }
+  }
+  // Exclude production/national builders
+  const excluded = config.excludedBuilders || [];
+  if (excluded.length > 0) {
+    const clauses = excluded.map(() => `(COALESCE(builder_name,'') NOT LIKE ? AND COALESCE(builder_company,'') NOT LIKE ?)`);
+    cond.push(clauses.join(' AND '));
+    for (const name of excluded) { vals.push(`%${name}%`, `%${name}%`); }
   }
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
   return queryAll(`SELECT * FROM permits ${where} ORDER BY inspection_date DESC`, vals);
@@ -337,6 +382,13 @@ async function getOpportunities(params = {}) {
   const cond = ['is_drywall_opportunity = 1']; const vals = [];
   if (params.confidence) { cond.push('opportunity_confidence = ?'); vals.push(params.confidence); }
   if (params.municipality) { cond.push('municipality = ?'); vals.push(params.municipality); }
+  // Exclude production/national builders
+  const excluded = config.excludedBuilders || [];
+  if (excluded.length > 0) {
+    const clauses = excluded.map(() => `(COALESCE(builder_name,'') NOT LIKE ? AND COALESCE(builder_company,'') NOT LIKE ?)`);
+    cond.push(clauses.join(' AND '));
+    for (const name of excluded) { vals.push(`%${name}%`, `%${name}%`); }
+  }
   const where = `WHERE ${cond.join(' AND ')}`;
   return queryAll(`SELECT * FROM permits ${where} ORDER BY CASE opportunity_confidence WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 END, inspection_date DESC`, vals);
 }
@@ -359,6 +411,30 @@ async function backfillOpportunityScores() {
   console.log(`[DB] Backfilled opportunity scores for ${updated} permits`);
 }
 
+// ─── Backfill builder cache from existing DB data ────────────────────────────
+async function backfillBuilderCache() {
+  await getDb();
+  const rows = queryAll(`SELECT DISTINCT builder_company, builder_phone, builder_email, builder_website
+    FROM permits
+    WHERE builder_company IS NOT NULL AND builder_company != ''
+      AND (builder_phone IS NOT NULL OR builder_email IS NOT NULL OR builder_website IS NOT NULL)`);
+  let added = 0;
+  for (const row of rows) {
+    if (!builderCache.has(row.builder_company)) {
+      builderCache.set(row.builder_company, {
+        website: row.builder_website || null,
+        phone: row.builder_phone || null,
+        email: row.builder_email || null,
+        allPhones: row.builder_phone ? [row.builder_phone] : [],
+        allEmails: row.builder_email ? [row.builder_email] : [],
+      });
+      added++;
+    }
+  }
+  const stats = builderCache.stats();
+  console.log(`[BuilderCache] Backfill complete: ${added} new entries added (${stats.total} total, ${stats.withPhone} with phone, ${stats.withEmail} with email)`);
+}
+
 // ─── Scrape runs ─────────────────────────────────────────────────────────────
 async function createScrapeRun() { await getDb(); execute('INSERT INTO scrape_runs (status) VALUES (?)', ['running']); const r=queryOne('SELECT last_insert_rowid() as id'); return r.id; }
 async function updateScrapeRun(id, data) { await getDb(); const f=[]; const v=[]; for (const [k,val] of Object.entries(data)) { f.push(`${k}=?`); v.push(val===undefined?null:val); } v.push(id); if(f.length) execute(`UPDATE scrape_runs SET ${f.join(',')} WHERE id=?`, v); }
@@ -374,4 +450,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };

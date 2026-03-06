@@ -4,6 +4,7 @@ const config = require('../config');
 const db = require('../db/init');
 const utils = require('./utils');
 const { lookupBuilder, launchBrowser } = require('./builderLookup');
+const directoryScraper = require('./directory-scraper');
 
 // Import all portal scrapers
 const citizenserve = require('./portals/citizenserve');
@@ -135,6 +136,15 @@ async function runAllScrapers(options = {}) {
 
     // Rate limit between municipalities
     await utils.delay(config.scraper.requestDelayMs);
+  }
+
+  // ── Pre-populate builder cache from CHBA directory ──
+  try {
+    utils.log('\n📒 Crawling Charleston HBA directory for builder contacts...');
+    currentRun.current_municipality = 'CHBA Directory';
+    await directoryScraper.scrapeDirectory();
+  } catch (err) {
+    utils.log(`⚠️  Directory scrape error: ${err.message}`);
   }
 
   // ── Auto-crawl builder websites (uses ONE shared browser to avoid OOM) ──

@@ -7,9 +7,12 @@ const db = require('./db/init');
 const scraper = require('./scraper/index');
 const drywallScanner = require('./scraper/drywall-scanner');
 const builderLookup = require('./scraper/builderLookup');
+const directoryScraper = require('./scraper/directory-scraper');
 
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+
+const builderCache = require('./scraper/builder-cache');
 
 const app = express();
 app.use(express.json());
@@ -269,6 +272,30 @@ app.get('/api/builder-lookup/status', (req, res) => {
   res.json({ running: builderLookupInProgress, ...(builderLookupStatus || { status: 'idle' }) });
 });
 
+app.get('/api/builder-cache/stats', (req, res) => {
+  res.json(builderCache.stats());
+});
+
+// ─── Directory Scraper API ──────────────────────────────────────────────────
+let directoryScrapeInProgress = false;
+app.post('/api/directory/scrape', async (req, res) => {
+  if (directoryScrapeInProgress) return res.status(409).json({ error: 'Directory scrape already in progress', status: directoryScraper.getScanStatus() });
+  const force = req.body?.force === true;
+  directoryScrapeInProgress = true;
+  res.json({ message: force ? 'Directory scrape started (forced)' : 'Directory scrape started' });
+  try {
+    await directoryScraper.scrapeDirectory(null, { force });
+  } catch (err) {
+    console.error('Directory scrape error:', err);
+  } finally {
+    directoryScrapeInProgress = false;
+  }
+});
+
+app.get('/api/directory/status', (req, res) => {
+  res.json({ running: directoryScrapeInProgress, ...(directoryScraper.getScanStatus() || { status: 'idle' }) });
+});
+
 app.post('/api/permits/:id/lookup-builder', async (req, res) => {
   try {
     const permit = await db.getPermitById(req.params.id);
@@ -363,6 +390,7 @@ app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.
 async function start() {
   await db.getDb();
   await db.backfillOpportunityScores();
+  await db.backfillBuilderCache();
   app.listen(config.server.port, () => {
     console.log('');
     console.log('🏗️  Pierpont Money Printer');

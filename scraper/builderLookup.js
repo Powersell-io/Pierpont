@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
 const config = require('../config');
 const utils = require('./utils');
+const builderCache = require('./builder-cache');
 
 const PHONE_RE = /(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -313,7 +314,16 @@ async function scrapeContactInfo(websiteUrl, page) {
  * Full builder lookup: search for company website, then scrape contact info.
  * Uses a SINGLE shared browser instance for both steps to avoid OOM.
  */
-async function lookupBuilder(companyName, sharedBrowser) {
+async function lookupBuilder(companyName, sharedBrowser, { skipCache = false } = {}) {
+  // Check cache first — instant return if we already know this builder
+  if (!skipCache) {
+    const cached = builderCache.get(companyName);
+    if (cached) {
+      utils.log(`[BuilderLookup] Cache hit for "${companyName}" => ${cached.website || 'no website'}, ${cached.phone || 'no phone'}, ${cached.email || 'no email'}`);
+      return cached;
+    }
+  }
+
   utils.log(`[BuilderLookup] Looking up "${companyName}"...`);
 
   const ownBrowser = !sharedBrowser;
@@ -332,7 +342,9 @@ async function lookupBuilder(companyName, sharedBrowser) {
     const website = await findCompanyWebsite(companyName, page);
     if (!website) {
       utils.log(`[BuilderLookup] No website found for "${companyName}"`);
-      return { website: null, phone: null, email: null, allPhones: [], allEmails: [] };
+      const empty = { website: null, phone: null, email: null, allPhones: [], allEmails: [] };
+      builderCache.set(companyName, empty); // Cache the miss so we don't re-search
+      return empty;
     }
 
     utils.log(`[BuilderLookup] Found website: ${website}`);
@@ -341,15 +353,21 @@ async function lookupBuilder(companyName, sharedBrowser) {
     const { phones, emails } = await scrapeContactInfo(website, page);
     utils.log(`[BuilderLookup] "${companyName}" => ${website} | ${phones.length} phone(s), ${emails.length} email(s)`);
 
-    return {
+    const result = {
       website,
       phone: phones[0] || null,
       email: emails[0] || null,
       allPhones: phones,
       allEmails: emails,
     };
+
+    // Save to cache (even partial results — avoids re-lookups)
+    builderCache.set(companyName, result);
+
+    return result;
   } catch (err) {
     utils.log(`[BuilderLookup] Error looking up "${companyName}": ${err.message}`);
+    // Don't cache errors — we may want to retry later
     return { website: null, phone: null, email: null, allPhones: [], allEmails: [] };
   } finally {
     if (page) try { await page.close(); } catch {}
@@ -397,23 +415,32 @@ async function bulkLookupBuilders(db, statusCallback) {
       }
 
       try {
-        // If permits already have a website but no phone/email, re-scrape that website
         const companyPermits = companyMap.get(company);
-        const existingWebsite = companyPermits.find(p => p.builder_website)?.builder_website;
+
+        // Check cache first — skip web lookup entirely if we have data
+        const cached = builderCache.get(company);
         let result;
 
-        if (existingWebsite && companyPermits.every(p => !p.builder_phone && !p.builder_email)) {
-          // Already have website but missing contact info — just re-scrape the site
-          utils.log(`[BuilderLookup] Re-scraping "${company}" at ${existingWebsite} for contact info...`);
-          const page = await browser.newPage();
-          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-          await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
-          const { phones, emails } = await scrapeContactInfo(existingWebsite, page);
-          try { await page.close(); } catch {}
-          result = { website: existingWebsite, phone: phones[0] || null, email: emails[0] || null, allPhones: phones, allEmails: emails };
-          utils.log(`[BuilderLookup] Re-scrape "${company}": ${phones.length} phone(s), ${emails.length} email(s)`);
+        if (cached) {
+          utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.website || 'no site'}`);
+          result = cached;
         } else {
-          result = await lookupBuilder(company, browser);
+          // If permits already have a website but no phone/email, re-scrape that website
+          const existingWebsite = companyPermits.find(p => p.builder_website)?.builder_website;
+
+          if (existingWebsite && companyPermits.every(p => !p.builder_phone && !p.builder_email)) {
+            utils.log(`[BuilderLookup] Re-scraping "${company}" at ${existingWebsite} for contact info...`);
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+            const { phones, emails } = await scrapeContactInfo(existingWebsite, page);
+            try { await page.close(); } catch {}
+            result = { website: existingWebsite, phone: phones[0] || null, email: emails[0] || null, allPhones: phones, allEmails: emails };
+            utils.log(`[BuilderLookup] Re-scrape "${company}": ${phones.length} phone(s), ${emails.length} email(s)`);
+            builderCache.set(company, result);
+          } else {
+            result = await lookupBuilder(company, browser);
+          }
         }
 
         for (const permit of companyPermits) {
