@@ -368,8 +368,8 @@ const cronJobs = [
   cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
   cron.schedule('0 13 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
   cron.schedule('0 18 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
-  // Daily leads email — 7:00 AM EST
-  cron.schedule('0 7 * * *', async () => {
+  // Daily leads email — 7:30 AM EST Mon-Fri (after scrape finishes)
+  cron.schedule('30 7 * * 1-5', async () => {
     try { await dailyEmail.sendDailyEmail(); } catch (err) { console.error('[Email] Cron error:', err.message); }
   }, { timezone: 'America/New_York' }),
 ];
@@ -385,10 +385,13 @@ app.post('/api/schedule/toggle', (req, res) => {
 });
 
 // ─── Daily email ─────────────────────────────────────────────────────────────
+// POST /api/email/send         — send new leads only
+// POST /api/email/send?full=1  — send ALL leads >= $300k (first run)
 app.post('/api/email/send', async (req, res) => {
   if (!isAuthenticated(req)) return res.status(401).json({ error: 'Not authenticated' });
   try {
-    const result = await dailyEmail.sendDailyEmail();
+    const fullRun = req.query.full === '1' || req.body.full === true;
+    const result = await dailyEmail.sendDailyEmail({ fullRun });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -398,8 +401,11 @@ app.post('/api/email/send', async (req, res) => {
 app.get('/api/email/preview', async (req, res) => {
   if (!isAuthenticated(req)) return res.status(401).json({ error: 'Not authenticated' });
   try {
-    const leads = await db.getNewHighValueLeads(dailyEmail.MIN_VALUE);
-    res.json({ count: leads.length, leads: leads.slice(0, 20), configured: !!process.env.EMAIL_FROM });
+    const full = req.query.full === '1';
+    const leads = full
+      ? await db.getAllHighValueLeads(dailyEmail.MIN_VALUE)
+      : await db.getNewHighValueLeads(dailyEmail.MIN_VALUE);
+    res.json({ count: leads.length, mode: full ? 'full' : 'new_only', leads: leads.slice(0, 20), configured: !!process.env.MAILJET_API_KEY });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

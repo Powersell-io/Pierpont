@@ -1,12 +1,10 @@
-// Daily Email Report — sends new high-value leads every morning
+// Daily Email Report — sends new high-value leads every morning via Mailjet
 const nodemailer = require('nodemailer');
 const db = require('../db/init');
 const utils = require('./utils');
 
 const MIN_VALUE = 300000;
 
-// SMTP config — defaults to Mailjet, supports any SMTP provider
-// Env vars: MAILJET_API_KEY, MAILJET_SECRET_KEY, EMAIL_FROM, EMAIL_TO
 function getTransporter() {
   const apiKey = process.env.MAILJET_API_KEY;
   const secretKey = process.env.MAILJET_SECRET_KEY;
@@ -25,56 +23,128 @@ function getTransporter() {
   });
 }
 
-function formatCurrency(val) {
-  if (!val) return 'N/A';
+function fmt(val) {
+  if (!val && val !== 0) return '';
   return '$' + Number(val).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function buildEmailHtml(leads) {
-  const rows = leads.map(lead => `
-    <tr style="border-bottom:1px solid #e2e8f0;">
-      <td style="padding:10px 12px;font-weight:600;color:#1a202c;">${lead.address || 'N/A'}</td>
-      <td style="padding:10px 12px;">${lead.municipality || ''}</td>
-      <td style="padding:10px 12px;font-weight:700;color:#2B6CB0;">${formatCurrency(lead.project_value)}</td>
-      <td style="padding:10px 12px;">${lead.builder_company || lead.builder_name || 'Unknown'}</td>
-      <td style="padding:10px 12px;">${lead.builder_phone || ''}</td>
-      <td style="padding:10px 12px;">${lead.builder_email ? `<a href="mailto:${lead.builder_email}" style="color:#2B6CB0;">${lead.builder_email}</a>` : ''}</td>
-      <td style="padding:10px 12px;">${lead.owner_name || ''}</td>
-      <td style="padding:10px 12px;font-size:12px;color:#718096;">${lead.inspection_date || ''}</td>
-    </tr>
-  `).join('');
+function fmtDate(d) {
+  if (!d) return '';
+  try {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return d; }
+}
 
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Build CSV content for attachment
+function buildCsv(leads) {
+  const headers = ['Address', 'Municipality', 'Value', 'Builder', 'Phone', 'Email', 'Owner', 'Inspection Type', 'Inspection Date', 'Permit #'];
+  const rows = leads.map(l => [
+    `"${(l.address || '').replace(/"/g, '""')}"`,
+    `"${(l.municipality || '').replace(/"/g, '""')}"`,
+    l.project_value || '',
+    `"${(l.builder_company || l.builder_name || '').replace(/"/g, '""')}"`,
+    `"${(l.builder_phone || '').replace(/"/g, '""')}"`,
+    `"${(l.builder_email || '').replace(/"/g, '""')}"`,
+    `"${(l.owner_name || '').replace(/"/g, '""')}"`,
+    `"${(l.inspection_type || '').replace(/"/g, '""')}"`,
+    l.inspection_date || '',
+    `"${(l.permit_number || '').replace(/"/g, '""')}"`,
+  ].join(','));
+  return [headers.join(','), ...rows].join('\n');
+}
+
+function buildEmailHtml(leads, isFirstRun) {
   const totalValue = leads.reduce((sum, l) => sum + (l.project_value || 0), 0);
   const withPhone = leads.filter(l => l.builder_phone).length;
   const withEmail = leads.filter(l => l.builder_email).length;
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  return `
-<!DOCTYPE html>
+  const headerText = isFirstRun
+    ? `Full Pipeline — ${leads.length} Active Leads`
+    : `${leads.length} New Lead${leads.length !== 1 ? 's' : ''} Since Last Report`;
+
+  const rows = leads.map((l, i) => {
+    const bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+    const builder = escHtml(l.builder_company || l.builder_name || '');
+    const phone = l.builder_phone || '';
+    const email = l.builder_email || '';
+    const phoneLink = phone ? `<a href="tel:${phone.replace(/[^\d+]/g, '')}" style="color:#2B6CB0;text-decoration:none;">${escHtml(phone)}</a>` : '<span style="color:#cbd5e0;">—</span>';
+    const emailLink = email ? `<a href="mailto:${email}" style="color:#2B6CB0;text-decoration:none;">${escHtml(email)}</a>` : '<span style="color:#cbd5e0;">—</span>';
+
+    return `
+    <tr style="background:${bg};">
+      <td style="padding:12px 14px;border-bottom:1px solid #edf2f7;">
+        <div style="font-weight:600;color:#1a202c;font-size:14px;">${escHtml(l.address || 'N/A')}</div>
+        <div style="font-size:11px;color:#a0aec0;margin-top:2px;">${escHtml(l.municipality || '')} &bull; ${escHtml(l.permit_number || '')}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #edf2f7;text-align:right;">
+        <div style="font-weight:700;color:#2B6CB0;font-size:16px;">${fmt(l.project_value)}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #edf2f7;">
+        <div style="font-weight:500;color:#2d3748;">${builder || '<span style="color:#cbd5e0;">Unknown</span>'}</div>
+        <div style="font-size:12px;margin-top:3px;">${phoneLink}</div>
+        <div style="font-size:12px;margin-top:1px;">${emailLink}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #edf2f7;">
+        <div style="font-size:13px;color:#4a5568;">${escHtml(l.owner_name || '')}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #edf2f7;">
+        <div style="font-size:12px;color:#4a5568;">${escHtml(l.inspection_type || '')}</div>
+        <div style="font-size:11px;color:#a0aec0;margin-top:2px;">${fmtDate(l.inspection_date)}</div>
+        <div style="font-size:11px;color:${l.inspection_status && l.inspection_status.toLowerCase().includes('pass') ? '#38a169' : '#e53e3e'};font-weight:600;margin-top:1px;">${escHtml(l.inspection_status || '')}</div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f7fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:900px;margin:0 auto;padding:20px;">
-    <div style="background:linear-gradient(135deg,#1a365d,#2B6CB0);border-radius:12px;padding:24px 28px;margin-bottom:20px;">
-      <h1 style="margin:0;color:white;font-size:22px;">Pierpont Daily Leads</h1>
-      <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">
-        ${leads.length} new lead${leads.length !== 1 ? 's' : ''} over ${formatCurrency(MIN_VALUE)} &bull;
-        Total value: ${formatCurrency(totalValue)} &bull;
-        ${withPhone} with phone &bull; ${withEmail} with email
-      </p>
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:800px;margin:0 auto;padding:16px;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#2B6CB0 100%);border-radius:14px;padding:28px 32px;margin-bottom:16px;">
+      <h1 style="margin:0;color:white;font-size:24px;font-weight:700;letter-spacing:-0.3px;">Pierpont Money Printer</h1>
+      <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">${headerText}</p>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.6);font-size:12px;">${today}</p>
     </div>
 
-    <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <!-- Stats bar -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <div style="flex:1;background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#a0aec0;font-weight:600;">Leads</div>
+        <div style="font-size:22px;font-weight:700;color:#1a202c;">${leads.length}</div>
+      </div>
+      <div style="flex:1;background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#a0aec0;font-weight:600;">Total Value</div>
+        <div style="font-size:22px;font-weight:700;color:#2B6CB0;">${fmt(totalValue)}</div>
+      </div>
+      <div style="flex:1;background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#a0aec0;font-weight:600;">w/ Phone</div>
+        <div style="font-size:22px;font-weight:700;color:#38a169;">${withPhone}</div>
+      </div>
+      <div style="flex:1;background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#a0aec0;font-weight:600;">w/ Email</div>
+        <div style="font-size:22px;font-weight:700;color:#2B6CB0;">${withEmail}</div>
+      </div>
+    </div>
+
+    <!-- Leads table -->
+    <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
-          <tr style="background:#edf2f7;">
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Address</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Municipality</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Value</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Builder</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Phone</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Email</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Owner</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;">Inspection</th>
+          <tr style="background:#1a365d;">
+            <th style="padding:12px 14px;text-align:left;font-weight:600;color:white;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Property</th>
+            <th style="padding:12px 14px;text-align:right;font-weight:600;color:white;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Value</th>
+            <th style="padding:12px 14px;text-align:left;font-weight:600;color:white;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Builder / Contact</th>
+            <th style="padding:12px 14px;text-align:left;font-weight:600;color:white;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Owner</th>
+            <th style="padding:12px 14px;text-align:left;font-weight:600;color:white;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Inspection</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -82,14 +152,20 @@ function buildEmailHtml(leads) {
     </div>
 
     <p style="text-align:center;color:#a0aec0;font-size:11px;margin-top:20px;">
-      Pierpont Money Printer &mdash; Automated daily lead report
+      Pierpont Money Printer &mdash; CSV attached for your records
     </p>
   </div>
 </body>
 </html>`;
 }
 
-async function sendDailyEmail() {
+/**
+ * Send the daily email.
+ * Options:
+ *   fullRun: true  — send ALL leads >= $300k (first run / reset)
+ *   fullRun: false — send only un-emailed leads (daily incremental)
+ */
+async function sendDailyEmail({ fullRun = false } = {}) {
   const transporter = getTransporter();
   if (!transporter) return { sent: false, reason: 'no email config' };
 
@@ -100,34 +176,63 @@ async function sendDailyEmail() {
   }
 
   try {
-    const leads = await db.getNewHighValueLeads(MIN_VALUE);
-
-    if (leads.length === 0) {
-      utils.log('[Email] No new leads over ' + formatCurrency(MIN_VALUE) + ' — skipping email');
-      return { sent: false, reason: 'no new leads', count: 0 };
+    let leads;
+    if (fullRun) {
+      // First run: get ALL leads >= $300k regardless of emailed_at
+      leads = await db.getAllHighValueLeads(MIN_VALUE);
+    } else {
+      // Incremental: only un-emailed leads
+      leads = await db.getNewHighValueLeads(MIN_VALUE);
     }
 
-    utils.log(`[Email] Sending ${leads.length} new leads over ${formatCurrency(MIN_VALUE)} to ${to}...`);
+    if (leads.length === 0) {
+      utils.log('[Email] No ' + (fullRun ? '' : 'new ') + 'leads over ' + fmt(MIN_VALUE) + ' — skipping email');
+      return { sent: false, reason: 'no leads', count: 0 };
+    }
 
-    const html = buildEmailHtml(leads);
-    const subject = `${leads.length} New Lead${leads.length !== 1 ? 's' : ''} Over ${formatCurrency(MIN_VALUE)} — Pierpont`;
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Group by inspection type for subject line
+    const types = {};
+    for (const l of leads) {
+      const t = (l.inspection_type || 'Unknown').replace(/^Residential\s+/i, '').replace(/^Commercial\s+/i, '');
+      types[t] = (types[t] || 0) + 1;
+    }
+    const topType = Object.entries(types).sort((a, b) => b[1] - a[1])[0];
+    const typeLabel = topType ? topType[0] : 'Building';
+
+    const subject = fullRun
+      ? `${typeLabel} Inspections Passed — Full Pipeline ${dateStr} — ${leads.length} Leads`
+      : `${typeLabel} Inspections Passed — ${dateStr} — ${leads.length} New Lead${leads.length !== 1 ? 's' : ''}`;
+
+    utils.log(`[Email] Sending ${leads.length} leads to ${to} (${fullRun ? 'full run' : 'incremental'})...`);
+
+    const html = buildEmailHtml(leads, fullRun);
+    const csv = buildCsv(leads);
+    const csvFilename = `pierpont-leads-${today.toISOString().slice(0, 10)}.csv`;
 
     await transporter.sendMail({
       from: `"Pierpont Money Printer" <${process.env.EMAIL_FROM}>`,
       to,
       subject,
       html,
+      attachments: [{
+        filename: csvFilename,
+        content: csv,
+        contentType: 'text/csv',
+      }],
     });
 
-    // Mark these permits as emailed so they don't get sent again
+    // Mark these permits as emailed
     await db.markPermitsEmailed(leads.map(l => l.id));
 
     utils.log(`[Email] Sent ${leads.length} leads to ${to}`);
-    return { sent: true, count: leads.length, to };
+    return { sent: true, count: leads.length, to, subject };
   } catch (err) {
     utils.log(`[Email] Send failed: ${err.message}`);
     return { sent: false, reason: err.message };
   }
 }
 
-module.exports = { sendDailyEmail, buildEmailHtml, MIN_VALUE };
+module.exports = { sendDailyEmail, buildEmailHtml, buildCsv, MIN_VALUE };

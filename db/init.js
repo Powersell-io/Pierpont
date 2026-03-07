@@ -446,17 +446,29 @@ async function getLatestScrapeRun() { await getDb(); return queryOne('SELECT * F
 function close() { if(db){saveToFile();db.close();db=null;dbReady=null;} }
 
 // ─── Daily email leads ───────────────────────────────────────────────────────
-async function getNewHighValueLeads(minValue = 300000) {
-  await getDb();
+function buildHighValueQuery(minValue, onlyNew) {
   const excluded = config.excludedBuilders || [];
-  const cond = ['project_value >= ?', 'emailed_at IS NULL'];
+  const cond = ['project_value >= ?'];
   const vals = [minValue];
+  if (onlyNew) cond.push('emailed_at IS NULL');
   if (excluded.length > 0) {
     const clauses = excluded.map(() => `(COALESCE(builder_name,'') NOT LIKE ? AND COALESCE(builder_company,'') NOT LIKE ?)`);
     cond.push(clauses.join(' AND '));
     for (const name of excluded) { vals.push(`%${name}%`, `%${name}%`); }
   }
-  return queryAll(`SELECT * FROM permits WHERE ${cond.join(' AND ')} ORDER BY project_value DESC`, vals);
+  return { where: cond.join(' AND '), vals };
+}
+
+async function getNewHighValueLeads(minValue = 300000) {
+  await getDb();
+  const { where, vals } = buildHighValueQuery(minValue, true);
+  return queryAll(`SELECT * FROM permits WHERE ${where} ORDER BY project_value DESC`, vals);
+}
+
+async function getAllHighValueLeads(minValue = 300000) {
+  await getDb();
+  const { where, vals } = buildHighValueQuery(minValue, false);
+  return queryAll(`SELECT * FROM permits WHERE ${where} ORDER BY project_value DESC`, vals);
 }
 
 async function markPermitsEmailed(ids) {
@@ -478,4 +490,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, getNewHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };
