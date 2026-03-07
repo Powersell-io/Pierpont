@@ -14,6 +14,14 @@ const utils = require('../utils');
 
 const SEEN_FILE = path.join(__dirname, '..', '..', 'seen_permits.json');
 
+// Parse EnerGov date formats (handles /Date(ms)/ and standard dates)
+function parseDate(val) {
+  if (!val) return null;
+  const msMatch = String(val).match(/\/Date\((\d+)\)\//);
+  if (msMatch) return utils.formatDate(new Date(parseInt(msMatch[1])));
+  return utils.formatDate(val);
+}
+
 const BASE_URL = 'https://egcss.charleston-sc.gov/EnerGov_Prod/selfservice';
 const SEARCH_API = `${BASE_URL}/api/energov/search/search`;
 const CONTACTS_API = `${BASE_URL}/api/energov/entity/contacts/search/search`;
@@ -83,11 +91,10 @@ function buildSearchBody(typeId, statusId, pageNumber = 1, pageSize = 100) {
 }
 
 // Build a POST body for searching permits by address (uses Keyword search like the portal UI)
-function buildPermitSearchBody(address) {
-  // Mirrors the portal URL: ?m=1&fm=1&ps=10&pn=1&em=true&st=<address>
+function buildPermitSearchBody(address, exactMatch = true) {
   return {
     Keyword: address,
-    ExactMatch: true,
+    ExactMatch: exactMatch,
     SearchModule: 1,
     FilterModule: 1,
     SearchMainAddress: false,
@@ -196,29 +203,31 @@ module.exports = {
         await new Promise(r => setTimeout(r, 1500));
       }
 
-      // Enrich with contact data via direct API calls (much faster than page loads)
+      // Enrich ALL permits with contact data via direct API calls
       if (allPermits.size > 0) {
         const sortedEntries = Array.from(allPermits.entries())
           .sort((a, b) => (b[1].inspection_date || '').localeCompare(a[1].inspection_date || ''));
 
-        const DETAIL_LIMIT = options.testLimit || 100;
-        const toEnrich = sortedEntries.slice(0, DETAIL_LIMIT);
-        utils.log(`[Charleston] Enriching ${toEnrich.length} most recent permits with contact data (of ${allPermits.size} total)...`);
+        utils.log(`[Charleston] Enriching all ${sortedEntries.length} permits with contact data...`);
 
         let enrichedCount = 0;
-        for (const [key, permit] of toEnrich) {
+        let failedCount = 0;
+        for (const [key, permit] of sortedEntries) {
           try {
             const enriched = await this.enrichWithContactData(page, permit);
             if (enriched) {
               allPermits.set(key, enriched);
               enrichedCount++;
+            } else {
+              failedCount++;
             }
           } catch (err) {
+            failedCount++;
             utils.log(`[Charleston] Enrich error for ${key}: ${err.message}`);
           }
           await new Promise(r => setTimeout(r, 500));
         }
-        utils.log(`[Charleston] Enriched ${enrichedCount}/${toEnrich.length} with contact data`);
+        utils.log(`[Charleston] Enriched ${enrichedCount}/${sortedEntries.length} with contact data (${failedCount} missed)`);
       }
 
       // Mark all new permits as seen
@@ -312,12 +321,10 @@ module.exports = {
     return permits;
   },
 
-  // Search the permit portal by address to find the residential building permit
-  // Returns enrichment data (value, builder, contacts) or null
-  async searchBuildingPermitByAddress(page, address, inspectionDate) {
-    utils.log(`[Charleston] Permit keyword search: "${address}"`);
-    const body = buildPermitSearchBody(address);
-
+  // Low-level permit search API call
+  async _permitSearch(page, keyword, exactMatch) {
+    utils.log(`[Charleston] Permit search: "${keyword}" (exact=${exactMatch})`);
+    const body = buildPermitSearchBody(keyword, exactMatch);
     const result = await page.evaluate(async (url, body, headers) => {
       try {
         const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -325,22 +332,31 @@ module.exports = {
       } catch (e) { return { error: e.message }; }
     }, SEARCH_API, body, TENANT_HEADERS);
 
-    if (result.error) {
-      utils.log(`[Charleston] Permit search API error: ${result.error}`);
-      return null;
-    }
-    if (!result.Success) {
-      utils.log(`[Charleston] Permit search API failed: ${result.ErrorMessage || 'unknown'}`);
-      return null;
-    }
-    if (!result.Result?.EntityResults?.length) {
-      utils.log(`[Charleston] Permit search returned 0 results for "${address}"`);
-      return null;
+    if (result.error || !result.Success) return null;
+    if (!result.Result?.EntityResults?.length) return null;
+    utils.log(`[Charleston] Permit search returned ${result.Result.EntityResults.length} results`);
+    return result.Result.EntityResults;
+  },
+
+  // Search the permit portal by address to find the residential building permit
+  // Returns enrichment data (value, builder, contacts) or null
+  // Tries exact match first, then fuzzy with simplified address as fallback
+  async searchBuildingPermitByAddress(page, address, inspectionDate) {
+    let entities = null;
+
+    // Try exact match first
+    entities = await this._permitSearch(page, address, true);
+
+    // Fallback: fuzzy match with just street number + street name
+    if (!entities) {
+      const simplified = address.replace(/\s+/g, ' ').trim().split(/\s{2,}|,/)[0].trim();
+      if (simplified !== address && simplified.length > 5) {
+        utils.log(`[Charleston] Exact match failed, retrying fuzzy: "${simplified}"`);
+        entities = await this._permitSearch(page, simplified, false);
+      }
     }
 
-    utils.log(`[Charleston] Permit search returned ${result.Result.EntityResults.length} results for "${address}"`);
-
-    const entities = result.Result.EntityResults;
+    if (!entities || entities.length === 0) return null;
 
     // Match actual permits (not inspections) with "Building" in the type
     // Permit CaseType = "Permit - Building", workclass = "Residential New", etc.
@@ -466,9 +482,11 @@ module.exports = {
     const detailData = {};
     let dataSource = 'inspection_contacts';
 
-    // Preferred path: search for building permit by address
+    // Preferred path: search for building permit by address (exact first, then fuzzy fallback)
+    let permitData = null;
     try {
-      const permitData = await this.searchBuildingPermitByAddress(page, address, permit.inspection_date);
+      permitData = await this.searchBuildingPermitByAddress(page, address, permit.inspection_date);
+
       if (permitData) {
         dataSource = 'building_permit_search';
         for (const key of ['project_value', 'builder_name', 'builder_company', 'owner_name', 'permit_type', 'permit_issue_date']) {

@@ -499,6 +499,13 @@ module.exports = {
     'Trellis Residential',
     'Ragland Homes',
     'Fox Creek Homes',
+    'Center Park Homes',
+    'Barrow Building',
+    'J. Meyer Homes',
+    'J Meyer Homes',
+    'Luxe Builders',
+    'Watts Builders',
+    'Port City Home',
   ],
 
   // FUTURE hooks
