@@ -5,23 +5,23 @@ const utils = require('./utils');
 
 const MIN_VALUE = 300000;
 
-// SMTP config from env vars — supports Gmail, ProtonMail, or any SMTP
+// SMTP config — defaults to Mailjet, supports any SMTP provider
+// Env vars: MAILJET_API_KEY, MAILJET_SECRET_KEY, EMAIL_FROM, EMAIL_TO
 function getTransporter() {
-  const host = process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.EMAIL_SMTP_PORT || '465');
-  const user = process.env.EMAIL_FROM;
-  const pass = process.env.EMAIL_APP_PASSWORD;
+  const apiKey = process.env.MAILJET_API_KEY;
+  const secretKey = process.env.MAILJET_SECRET_KEY;
+  const from = process.env.EMAIL_FROM;
 
-  if (!user || !pass) {
-    utils.log('[Email] Missing EMAIL_FROM or EMAIL_APP_PASSWORD env vars — email disabled');
+  if (!apiKey || !secretKey || !from) {
+    utils.log('[Email] Missing MAILJET_API_KEY, MAILJET_SECRET_KEY, or EMAIL_FROM — email disabled');
     return null;
   }
 
   return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
+    host: process.env.EMAIL_SMTP_HOST || 'in-v3.mailjet.com',
+    port: parseInt(process.env.EMAIL_SMTP_PORT || '587'),
+    secure: false,
+    auth: { user: apiKey, pass: secretKey },
   });
 }
 
