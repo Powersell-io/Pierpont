@@ -11,18 +11,30 @@ const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
 // Directories/aggregators to skip when picking company website
 const SKIP_DOMAINS = [
-  'yelp.com', 'bbb.org', 'facebook.com', 'instagram.com', 'twitter.com',
-  'linkedin.com', 'yellowpages.com', 'angi.com', 'angieslist.com',
+  // Social media
+  'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
+  'linkedin.com', 'youtube.com', 'pinterest.com', 'tiktok.com',
+  'reddit.com', 'nextdoor.com',
+  // Search engines / tech
+  'google.com', 'bing.com', 'duckduckgo.com', 'apple.com', 'amazon.com',
+  // Review / directory aggregators
+  'yelp.com', 'bbb.org', 'yellowpages.com', 'angi.com', 'angieslist.com',
   'homeadvisor.com', 'thumbtack.com', 'houzz.com', 'buildzoom.com',
-  'manta.com', 'mapquest.com', 'google.com', 'bing.com', 'youtube.com',
-  'pinterest.com', 'nextdoor.com', 'porch.com', 'chamberofcommerce.com',
+  'manta.com', 'mapquest.com', 'porch.com', 'chamberofcommerce.com',
+  // Business data aggregators
   'dnb.com', 'buzzfile.com', 'bloomberg.com', 'zoominfo.com',
-  'tiktok.com', 'reddit.com', 'wikipedia.org', 'amazon.com',
-  'duckduckgo.com', 'apple.com', 'x.com', 'bizapedia.com',
-  'opencorporates.com', 'sec.gov', 'companieslist.co',
+  'bizapedia.com', 'opencorporates.com', 'companieslist.co',
+  'govtribe.com', 'allbiz.com', 'infobel.com', 'cylex.us.com',
+  'dandb.com', 'corporationwiki.com', 'buzzfile.com', 'owler.com',
+  'crunchbase.com', 'glassdoor.com', 'indeed.com', 'bizmappr.com',
+  'findglocal.com', 'spoke.com', 'ripoffreport.com', 'trustpilot.com',
+  'sitejabber.com', 'birdeye.com', 'g2.com',
+  // Real estate aggregators
   'newhomesource.com', 'newhomeguide.com', 'zillow.com',
   'realtor.com', 'redfin.com', 'trulia.com', 'homes.com',
   'homesnap.com', 'movoto.com', 'apartments.com',
+  // Government / legal
+  'sec.gov', 'wikipedia.org',
 ];
 
 // Junk email patterns to skip
@@ -143,7 +155,8 @@ function extractContactFromHtml(html, $) {
 }
 
 /**
- * Search DuckDuckGo for a builder company website.
+ * Search Google for a builder company website.
+ * Tries Google first (better results), falls back to DuckDuckGo if Google blocks.
  * Accepts an existing browser page to reuse (avoids launching new browsers).
  */
 async function findCompanyWebsite(companyName, page) {
@@ -158,30 +171,74 @@ async function findCompanyWebsite(companyName, page) {
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     }
 
-    const query = `${companyName} South Carolina`;
-    const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 20000 });
-    await new Promise(r => setTimeout(r, 3000));
+    // Clean up company name for better search results
+    const cleanName = companyName
+      .replace(/,?\s*(LLC|Inc\.?|Corp\.?|Co\.?|L\.?L\.?C\.?)$/i, '')
+      .trim();
 
-    const links = await page.evaluate(() => {
-      const results = [];
-      document.querySelectorAll('article a[href^="http"], a[data-testid="result-title-a"]').forEach(a => {
-        results.push(a.href);
-      });
-      if (results.length === 0) {
+    const query = `${cleanName} contractor Charleston SC`;
+
+    // Try Google first — much better results than DuckDuckGo
+    let links = [];
+    try {
+      const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`;
+      await page.goto(googleUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+      await new Promise(r => setTimeout(r, 2000));
+
+      links = await page.evaluate(() => {
+        const results = [];
+        // Google search result links
         document.querySelectorAll('a[href^="http"]').forEach(a => {
-          if (!a.href.includes('duckduckgo.com')) results.push(a.href);
+          const href = a.href;
+          // Skip Google's own links
+          if (href.includes('google.com') || href.includes('google.co') ||
+              href.includes('googleapis.com') || href.includes('gstatic.com') ||
+              href.includes('accounts.google') || href.includes('support.google')) return;
+          // Skip Google redirect URLs — extract the actual URL
+          if (href.includes('/url?') || href.includes('google.com/url')) {
+            try {
+              const u = new URL(href);
+              const actual = u.searchParams.get('q') || u.searchParams.get('url');
+              if (actual && actual.startsWith('http')) results.push(actual);
+            } catch {}
+          } else {
+            results.push(href);
+          }
         });
-      }
-      return [...new Set(results)];
-    });
+        return [...new Set(results)];
+      });
+    } catch {
+      // Google blocked us — fall back to DuckDuckGo
+    }
+
+    // Fallback to DuckDuckGo if Google returned nothing
+    if (links.length === 0) {
+      try {
+        const ddgUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+        await page.goto(ddgUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+        await new Promise(r => setTimeout(r, 3000));
+
+        links = await page.evaluate(() => {
+          const results = [];
+          document.querySelectorAll('article a[href^="http"], a[data-testid="result-title-a"]').forEach(a => {
+            results.push(a.href);
+          });
+          if (results.length === 0) {
+            document.querySelectorAll('a[href^="http"]').forEach(a => {
+              if (!a.href.includes('duckduckgo.com')) results.push(a.href);
+            });
+          }
+          return [...new Set(results)];
+        });
+      } catch {}
+    }
 
     for (const link of links) {
       try {
         const hostname = new URL(link).hostname.toLowerCase();
         const isSkipped = SKIP_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
         if (isSkipped) continue;
-        if (hostname.includes('duckduckgo.')) continue;
+        if (hostname.includes('duckduckgo.') || hostname.includes('google.')) continue;
         return link;
       } catch { continue; }
     }
@@ -197,113 +254,103 @@ async function findCompanyWebsite(companyName, page) {
 
 /**
  * Scrape a website for contact info.
- * Accepts an existing browser page to reuse (avoids launching new browsers).
- * Falls back to axios for extra pages if Puppeteer misses info.
+ * Strategy: Load homepage first and discover the real contact page from nav links.
+ * Only tries 3-4 pages max instead of 13. Falls back to axios for speed.
  */
 async function scrapeContactInfo(websiteUrl, page) {
   if (!websiteUrl) return { phones: [], emails: [] };
 
   const allPhones = new Set();
   const allEmails = new Set();
-  const baseUrl = new URL(websiteUrl).origin;
+  let baseUrl;
+  try { baseUrl = new URL(websiteUrl).origin; } catch { return { phones: [], emails: [] }; }
 
-  const pagesToTry = [
-    websiteUrl,
-    `${baseUrl}/contact`,
-    `${baseUrl}/contact-us`,
-    `${baseUrl}/contact.html`,
-    `${baseUrl}/about`,
-    `${baseUrl}/about-us`,
-    `${baseUrl}/about.html`,
-    `${baseUrl}/get-in-touch`,
-    `${baseUrl}/connect`,
-    `${baseUrl}/team`,
-    `${baseUrl}/our-team`,
-    `${baseUrl}/locations`,
-    `${baseUrl}/footer`,
-  ];
+  const visited = new Set();
 
-  // ── Phase 1: Puppeteer (handles JS-rendered sites) ──
-  const ownBrowser = !page;
-  let browser;
-  try {
-    if (!page) {
-      browser = await launchBrowser();
-      page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
-    }
+  // Helper: scrape a single page via axios (fast, no JS but works for most sites)
+  async function scrapePage(url) {
+    if (visited.has(url)) return;
+    visited.add(url);
+    try {
+      const { data } = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        timeout: 8000,
+        maxRedirects: 5,
+        validateStatus: s => s < 400,
+      });
+      const $ = cheerio.load(data);
+      const { phones, emails } = extractContactFromHtml(data, $);
+      phones.forEach(p => allPhones.add(p));
+      emails.forEach(e => allEmails.add(e));
 
-    for (const pageUrl of pagesToTry) {
-      try {
-        const resp = await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 12000 });
-        if (!resp || resp.status() >= 400) continue;
-
-        await new Promise(r => setTimeout(r, 2500));
-
-        await page.evaluate(() => { window.scrollTo(0, document.body.scrollHeight); });
-        await new Promise(r => setTimeout(r, 1000));
-
-        const html = await page.content();
-        const $ = cheerio.load(html);
-        const { phones, emails } = extractContactFromHtml(html, $);
-        phones.forEach(p => allPhones.add(p));
-        emails.forEach(e => allEmails.add(e));
-
-        utils.log(`[BuilderLookup]   ${pageUrl.replace(baseUrl, '') || '/'}: ${phones.length}ph, ${emails.length}em`);
-
-        // Discover contact page links from nav/footer
-        if (pageUrl === websiteUrl) {
-          const contactLinks = await page.evaluate(() => {
-            const links = [];
-            document.querySelectorAll('a[href]').forEach(a => {
-              const href = a.href.toLowerCase();
-              const text = a.textContent.toLowerCase();
-              if (text.includes('contact') || text.includes('get in touch') ||
-                  text.includes('reach us') || text.includes('connect') ||
-                  href.includes('/contact') || href.includes('/get-in-touch')) {
-                links.push(a.href);
-              }
-            });
-            return [...new Set(links)].slice(0, 3);
-          });
-          for (const link of contactLinks) {
-            if (!pagesToTry.includes(link) && link.startsWith(baseUrl)) {
-              pagesToTry.push(link);
-            }
-          }
+      // Return discovered contact page links
+      const contactLinks = [];
+      $('a[href]').each((_, el) => {
+        const href = $(el).attr('href') || '';
+        const text = ($(el).text() || '').toLowerCase();
+        if (text.includes('contact') || text.includes('get in touch') ||
+            text.includes('reach us') || href.toLowerCase().includes('/contact')) {
+          try {
+            const full = href.startsWith('http') ? href : new URL(href, baseUrl).href;
+            if (full.startsWith(baseUrl) && !visited.has(full)) contactLinks.push(full);
+          } catch {}
         }
-
-        // Stop early if we already have both phone and email
-        if (allPhones.size > 0 && allEmails.size > 0) break;
-      } catch { continue; }
-    }
-  } catch (err) {
-    utils.log(`[BuilderLookup] Puppeteer scrape failed: ${err.message}`);
-  } finally {
-    if (ownBrowser && browser) try { await browser.close(); } catch {}
+      });
+      return contactLinks;
+    } catch { return []; }
   }
 
-  // ── Phase 2: Axios fallback ──
-  if (allPhones.size === 0 || allEmails.size === 0) {
-    utils.log(`[BuilderLookup] Puppeteer found ${allPhones.size} phone(s), ${allEmails.size} email(s) — trying axios fallback...`);
-    for (const pageUrl of pagesToTry.slice(0, 6)) {
-      try {
-        const { data } = await axios.get(pageUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-          },
-          timeout: 10000,
-          maxRedirects: 5,
-          validateStatus: s => s < 400,
-        });
-        const $ = cheerio.load(data);
-        const { phones, emails } = extractContactFromHtml(data, $);
-        phones.forEach(p => allPhones.add(p));
-        emails.forEach(e => allEmails.add(e));
-        if (allPhones.size > 0 && allEmails.size > 0) break;
-      } catch { continue; }
+  // Helper: scrape via Puppeteer (for JS-rendered sites)
+  async function scrapePagePuppeteer(url) {
+    if (visited.has(url)) return;
+    visited.add(url);
+    try {
+      const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 10000 });
+      if (!resp || resp.status() >= 400) return;
+      await new Promise(r => setTimeout(r, 1500));
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise(r => setTimeout(r, 500));
+
+      const html = await page.content();
+      const $ = cheerio.load(html);
+      const { phones, emails } = extractContactFromHtml(html, $);
+      phones.forEach(p => allPhones.add(p));
+      emails.forEach(e => allEmails.add(e));
+    } catch {}
+  }
+
+  // ── Phase 1: Fast axios scrape of homepage ──
+  const contactLinks = await scrapePage(websiteUrl) || [];
+  if (allPhones.size > 0 && allEmails.size > 0) {
+    return { phones: [...allPhones], emails: [...allEmails] };
+  }
+
+  // ── Phase 2: Follow discovered contact links (max 2) ──
+  for (const link of contactLinks.slice(0, 2)) {
+    await scrapePage(link);
+    if (allPhones.size > 0 && allEmails.size > 0) {
+      return { phones: [...allPhones], emails: [...allEmails] };
+    }
+  }
+
+  // ── Phase 3: Try common contact paths if nothing discovered ──
+  if (contactLinks.length === 0) {
+    for (const path of ['/contact', '/contact-us', '/about']) {
+      const url = `${baseUrl}${path}`;
+      await scrapePage(url);
+      if (allPhones.size > 0 || allEmails.size > 0) break;
+    }
+  }
+
+  // ── Phase 4: If still nothing, try Puppeteer on homepage (JS-rendered) ──
+  if (allPhones.size === 0 && allEmails.size === 0 && page) {
+    visited.clear(); // Allow re-visiting with Puppeteer
+    await scrapePagePuppeteer(websiteUrl);
+    if (allPhones.size === 0 && allEmails.size === 0) {
+      await scrapePagePuppeteer(`${baseUrl}/contact`);
     }
   }
 
