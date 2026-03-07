@@ -23,6 +23,7 @@
     "express": "^4.21.0",
     "luxon": "^3.7.2",
     "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.1",
     "puppeteer": "^23.9.0",
     "sql.js": "^1.11.0"
   }

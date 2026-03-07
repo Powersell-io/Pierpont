@@ -13,6 +13,7 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 
 const builderCache = require('./scraper/builder-cache');
+const dailyEmail = require('./scraper/daily-email');
 
 const app = express();
 app.use(express.json());
@@ -367,6 +368,10 @@ const cronJobs = [
   cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
   cron.schedule('0 13 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
   cron.schedule('0 18 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
+  // Daily leads email — 7:00 AM EST
+  cron.schedule('0 7 * * *', async () => {
+    try { await dailyEmail.sendDailyEmail(); } catch (err) { console.error('[Email] Cron error:', err.message); }
+  }, { timezone: 'America/New_York' }),
 ];
 
 app.get('/api/schedule', (req, res) => {
@@ -377,6 +382,27 @@ app.post('/api/schedule/toggle', (req, res) => {
   scheduleEnabled = !scheduleEnabled;
   console.log(`⏰ Auto-schedule ${scheduleEnabled ? 'enabled' : 'disabled'}`);
   res.json({ enabled: scheduleEnabled });
+});
+
+// ─── Daily email ─────────────────────────────────────────────────────────────
+app.post('/api/email/send', async (req, res) => {
+  if (!isAuthenticated(req)) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await dailyEmail.sendDailyEmail();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/email/preview', async (req, res) => {
+  if (!isAuthenticated(req)) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const leads = await db.getNewHighValueLeads(dailyEmail.MIN_VALUE);
+    res.json({ count: leads.length, leads: leads.slice(0, 20), configured: !!process.env.EMAIL_FROM });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Future placeholders ─────────────────────────────────────────────────────
@@ -398,6 +424,8 @@ async function start() {
     console.log('💾 Database initialized');
     console.log('🔍 Ready to scrape permits');
     console.log('⏰ Auto-scrape scheduled: 7:00 AM, 1:00 PM, 6:00 PM EST');
+    console.log(`📧 Daily email: ${process.env.EMAIL_FROM ? 'configured' : 'NOT configured (set EMAIL_FROM, EMAIL_TO, EMAIL_APP_PASSWORD)'}`);
+    if (process.env.EMAIL_FROM) console.log(`   From: ${process.env.EMAIL_FROM} → To: ${process.env.EMAIL_TO || process.env.EMAIL_FROM}`);
     console.log('');
   });
 }
