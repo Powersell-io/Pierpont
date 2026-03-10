@@ -13,6 +13,7 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 
 const builderCache = require('./scraper/builder-cache');
+const buyerList = require('./scraper/buyer-list');
 const dailyEmail = require('./scraper/daily-email');
 
 const app = express();
@@ -277,6 +278,10 @@ app.get('/api/builder-cache/stats', (req, res) => {
   res.json(builderCache.stats());
 });
 
+app.get('/api/buyer-list/stats', (req, res) => {
+  res.json(buyerList.stats());
+});
+
 // ─── Directory Scraper API ──────────────────────────────────────────────────
 let directoryScrapeInProgress = false;
 app.post('/api/directory/scrape', async (req, res) => {
@@ -428,6 +433,8 @@ async function start() {
     console.log('🏗️  Pierpont Money Printer');
     console.log(`📡 Server running at http://${config.server.host}:${config.server.port}`);
     console.log('💾 Database initialized');
+    const blStats = buyerList.stats();
+    console.log(`📋 Buyer lists loaded: ${blStats.totalEntries} entries (${blStats.withPhone} phones, ${blStats.withEmail} emails)`);
     console.log('🔍 Ready to scrape permits');
     console.log('⏰ Auto-scrape scheduled: 7:00 AM, 1:00 PM, 6:00 PM EST');
     console.log(`📧 Daily email: ${process.env.EMAIL_FROM ? 'configured' : 'NOT configured (set EMAIL_FROM, EMAIL_TO, EMAIL_APP_PASSWORD)'}`);

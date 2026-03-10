@@ -5,6 +5,7 @@ const puppeteer = require('puppeteer');
 const config = require('../config');
 const utils = require('./utils');
 const builderCache = require('./builder-cache');
+const buyerList = require('./buyer-list');
 
 const PHONE_RE = /(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -371,6 +372,22 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false } =
     }
   }
 
+  // Check buyer lists — fast local lookup before web scraping
+  const buyerMatch = buyerList.lookup(companyName);
+  if (buyerMatch && (buyerMatch.phone || buyerMatch.email)) {
+    utils.log(`[BuilderLookup] Buyer list hit for "${companyName}" => ${buyerMatch.phone || 'no phone'}, ${buyerMatch.email || 'no email'} (from ${buyerMatch.entityName})`);
+    const result = {
+      website: null,
+      phone: buyerMatch.phone || null,
+      email: buyerMatch.email || null,
+      allPhones: buyerMatch.phone ? [buyerMatch.phone] : [],
+      allEmails: buyerMatch.email ? [buyerMatch.email] : [],
+      source: 'buyer-list',
+    };
+    builderCache.set(companyName, result);
+    return result;
+  }
+
   utils.log(`[BuilderLookup] Looking up "${companyName}"...`);
 
   const ownBrowser = !sharedBrowser;
@@ -464,11 +481,24 @@ async function bulkLookupBuilders(db, statusCallback) {
       try {
         const companyPermits = companyMap.get(company);
 
-        // Check cache first — skip web lookup entirely if we have data
+        // Check buyer lists first — instant local lookup
+        const buyerMatch = buyerList.lookup(company);
+        // Check cache — skip web lookup entirely if we have data
         const cached = builderCache.get(company);
         let result;
 
-        if (cached) {
+        if (buyerMatch && (buyerMatch.phone || buyerMatch.email) && !cached) {
+          utils.log(`[BuilderLookup] Buyer list hit for "${company}" => ${buyerMatch.phone || 'no phone'}, ${buyerMatch.email || 'no email'}`);
+          result = {
+            website: null,
+            phone: buyerMatch.phone || null,
+            email: buyerMatch.email || null,
+            allPhones: buyerMatch.phone ? [buyerMatch.phone] : [],
+            allEmails: buyerMatch.email ? [buyerMatch.email] : [],
+            source: 'buyer-list',
+          };
+          builderCache.set(company, result);
+        } else if (cached) {
           utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.website || 'no site'}`);
           result = cached;
         } else {

@@ -25,6 +25,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
     "puppeteer": "^23.9.0",
+    "resend": "^6.9.3",
     "sql.js": "^1.11.0"
   }
 }
