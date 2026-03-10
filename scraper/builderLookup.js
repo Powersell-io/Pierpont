@@ -372,20 +372,10 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false } =
     }
   }
 
-  // Check buyer lists — fast local lookup before web scraping
+  // Check buyer lists — grab phone/email if available, but ALWAYS continue with web scraping
   const buyerMatch = buyerList.lookup(companyName);
   if (buyerMatch && (buyerMatch.phone || buyerMatch.email)) {
     utils.log(`[BuilderLookup] Buyer list hit for "${companyName}" => ${buyerMatch.phone || 'no phone'}, ${buyerMatch.email || 'no email'} (from ${buyerMatch.entityName})`);
-    const result = {
-      website: null,
-      phone: buyerMatch.phone || null,
-      email: buyerMatch.email || null,
-      allPhones: buyerMatch.phone ? [buyerMatch.phone] : [],
-      allEmails: buyerMatch.email ? [buyerMatch.email] : [],
-      source: 'buyer-list',
-    };
-    builderCache.set(companyName, result);
-    return result;
   }
 
   utils.log(`[BuilderLookup] Looking up "${companyName}"...`);
@@ -402,12 +392,25 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false } =
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
-    // Step 1: Find website via DuckDuckGo
+    // Step 1: Find website via Google/DuckDuckGo
     const website = await findCompanyWebsite(companyName, page);
     if (!website) {
       utils.log(`[BuilderLookup] No website found for "${companyName}"`);
+      // No website found — if buyer list had contact info, use that instead of empty
+      if (buyerMatch && (buyerMatch.phone || buyerMatch.email)) {
+        const result = {
+          website: null,
+          phone: buyerMatch.phone || null,
+          email: buyerMatch.email || null,
+          allPhones: buyerMatch.phone ? [buyerMatch.phone] : [],
+          allEmails: buyerMatch.email ? [buyerMatch.email] : [],
+          source: 'buyer-list',
+        };
+        builderCache.set(companyName, result);
+        return result;
+      }
       const empty = { website: null, phone: null, email: null, allPhones: [], allEmails: [] };
-      builderCache.set(companyName, empty); // Cache the miss so we don't re-search
+      builderCache.set(companyName, empty);
       return empty;
     }
 
@@ -417,12 +420,13 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false } =
     const { phones, emails } = await scrapeContactInfo(website, page);
     utils.log(`[BuilderLookup] "${companyName}" => ${website} | ${phones.length} phone(s), ${emails.length} email(s)`);
 
+    // Step 3: Merge — web scrape results are primary, buyer list fills any gaps
     const result = {
       website,
-      phone: phones[0] || null,
-      email: emails[0] || null,
-      allPhones: phones,
-      allEmails: emails,
+      phone: phones[0] || (buyerMatch ? buyerMatch.phone : null) || null,
+      email: emails[0] || (buyerMatch ? buyerMatch.email : null) || null,
+      allPhones: phones.length > 0 ? phones : (buyerMatch && buyerMatch.phone ? [buyerMatch.phone] : []),
+      allEmails: emails.length > 0 ? emails : (buyerMatch && buyerMatch.email ? [buyerMatch.email] : []),
     };
 
     // Save to cache (even partial results — avoids re-lookups)
@@ -481,24 +485,11 @@ async function bulkLookupBuilders(db, statusCallback) {
       try {
         const companyPermits = companyMap.get(company);
 
-        // Check buyer lists first — instant local lookup
-        const buyerMatch = buyerList.lookup(company);
-        // Check cache — skip web lookup entirely if we have data
+        // Check cache first — skip web lookup entirely if we have data
         const cached = builderCache.get(company);
         let result;
 
-        if (buyerMatch && (buyerMatch.phone || buyerMatch.email) && !cached) {
-          utils.log(`[BuilderLookup] Buyer list hit for "${company}" => ${buyerMatch.phone || 'no phone'}, ${buyerMatch.email || 'no email'}`);
-          result = {
-            website: null,
-            phone: buyerMatch.phone || null,
-            email: buyerMatch.email || null,
-            allPhones: buyerMatch.phone ? [buyerMatch.phone] : [],
-            allEmails: buyerMatch.email ? [buyerMatch.email] : [],
-            source: 'buyer-list',
-          };
-          builderCache.set(company, result);
-        } else if (cached) {
+        if (cached) {
           utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.website || 'no site'}`);
           result = cached;
         } else {
@@ -512,8 +503,16 @@ async function bulkLookupBuilders(db, statusCallback) {
             await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
             const { phones, emails } = await scrapeContactInfo(existingWebsite, page);
             try { await page.close(); } catch {}
-            result = { website: existingWebsite, phone: phones[0] || null, email: emails[0] || null, allPhones: phones, allEmails: emails };
-            utils.log(`[BuilderLookup] Re-scrape "${company}": ${phones.length} phone(s), ${emails.length} email(s)`);
+            // Merge with buyer list if web scrape came up short
+            const buyerMatch = buyerList.lookup(company);
+            result = {
+              website: existingWebsite,
+              phone: phones[0] || (buyerMatch ? buyerMatch.phone : null) || null,
+              email: emails[0] || (buyerMatch ? buyerMatch.email : null) || null,
+              allPhones: phones.length > 0 ? phones : (buyerMatch && buyerMatch.phone ? [buyerMatch.phone] : []),
+              allEmails: emails.length > 0 ? emails : (buyerMatch && buyerMatch.email ? [buyerMatch.email] : []),
+            };
+            utils.log(`[BuilderLookup] Re-scrape "${company}": ${phones.length} phone(s), ${emails.length} email(s)${buyerMatch ? ' + buyer list backup' : ''}`);
             builderCache.set(company, result);
           } else {
             result = await lookupBuilder(company, browser);
