@@ -217,6 +217,7 @@ module.exports = {
       active: true,
       driveTimeMinutes: 15,
       notes: 'BS&A Online permit portal',
+      foia: { type: 'email', email: 'bwelch@sullivansisland.sc.gov' },
     },
     isleOfPalms: {
       name: 'Isle of Palms',
@@ -226,6 +227,7 @@ module.exports = {
       citizenserveId: 286,
       active: true,
       driveTimeMinutes: 20,
+      foia: { type: 'email', email: 'dkerr@iop.net' },
     },
     northCharleston: {
       name: 'City of North Charleston',
@@ -234,16 +236,6 @@ module.exports = {
       portalType: 'arcgis',
       active: true,
       driveTimeMinutes: 25,
-    },
-    hanahan: {
-      name: 'City of Hanahan',
-      slug: 'hanahan',
-      portalUrl: 'https://hanahan.cityforceinc.com',
-      portalType: 'cityforce',
-      active: false,
-      driveTimeMinutes: 25,
-      notes: 'Login-walled CityForce portal',
-      foia: { type: 'portal', portalUrl: 'https://cityofhanahansc.nextrequest.com/requests/new' },
     },
     charlestonCounty: {
       name: 'Charleston County',
@@ -264,6 +256,7 @@ module.exports = {
       citizenserveId: 287,
       active: true,
       driveTimeMinutes: 35,
+      foia: { type: 'email', email: 'foia@kiawahisland.gov' },
     },
     seabrook: {
       name: 'Seabrook Island',
@@ -273,6 +266,7 @@ module.exports = {
       citizenserveId: 288,
       active: true,
       driveTimeMinutes: 35,
+      foia: { type: 'email', email: 'pwiggins@townofseabrookisland.org' },
     },
     follyBeach: {
       name: 'City of Folly Beach',
@@ -339,16 +333,6 @@ module.exports = {
       notes: 'No online portal — PDF only',
       foia: { type: 'email', email: 'cityfoiarequest@georgetownsc.gov' },
     },
-    colletonCounty: {
-      name: 'Colleton County',
-      slug: 'colleton-county',
-      portalUrl: null,
-      portalType: 'none',
-      active: false,
-      driveTimeMinutes: 70,
-      notes: 'No online portal — PDF only',
-      foia: { type: 'email', email: 'foia@colletoncounty.org' },
-    },
     bluffton: {
       name: 'Town of Bluffton',
       slug: 'bluffton',
@@ -384,26 +368,6 @@ module.exports = {
       active: true,
       driveTimeMinutes: 85,
     },
-    williamsburgCounty: {
-      name: 'Williamsburg County',
-      slug: 'williamsburg-county',
-      portalUrl: null,
-      portalType: 'none',
-      active: false,
-      driveTimeMinutes: 85,
-      notes: 'No online portal — PDF only',
-      foia: { type: 'email', email: 'FOIA-Request@wc.sc.gov' },
-    },
-    orangeburgCounty: {
-      name: 'Orangeburg County',
-      slug: 'orangeburg-county',
-      portalUrl: null,
-      portalType: 'none',
-      active: false,
-      driveTimeMinutes: 85,
-      notes: 'No online portal — PDF only',
-      foia: { type: 'email', email: 'foia@orangeburgcounty.org' },
-    },
   },
 
   // ─── Drive-time lookup from 29464 (Mount Pleasant) ─────────────────────────
@@ -415,7 +379,6 @@ module.exports = {
     'Isle of Palms': 20,
     'Charleston County': 20,
     'City of North Charleston': 25,
-    'City of Hanahan': 25,
     'Kiawah Island': 35,
     'Seabrook Island': 35,
     'City of Folly Beach': 35,
@@ -425,13 +388,10 @@ module.exports = {
     'Dorchester County': 45,
     'Town of Moncks Corner': 50,
     'Georgetown County': 70,
-    'Colleton County': 70,
     'Town of Bluffton': 75,
     'City of Beaufort': 80,
     'Town of Hilton Head Island': 80,
     'City of Hardeeville': 85,
-    'Williamsburg County': 85,
-    'Orangeburg County': 85,
   },
 
   // ─── Excluded Builders (production/national builders to auto-filter) ────────
