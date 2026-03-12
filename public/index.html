@@ -347,6 +347,29 @@
       <div id="foiaBody">
         <p class="text-xs mb-3" style="color:var(--text-dim)">These municipalities require a SC FOIA request to obtain permit data.</p>
         <div id="foiaList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
+
+        <!-- FOIA Response Import -->
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <h4 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-dim)">Import FOIA Response</h4>
+          <p class="text-xs mb-3" style="color:var(--text-dim)">Upload a file you received back from the county (CSV, Excel, or PDF) and we'll parse the permit data automatically.</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="w-48">
+              <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Municipality</label>
+              <select id="foiaImportMuni" class="glass-input w-full">
+                <option value="">Select municipality...</option>
+              </select>
+            </div>
+            <div class="flex-1 min-w-48">
+              <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">FOIA Response File</label>
+              <input type="file" id="foiaImportFile" accept=".csv,.xlsx,.xls,.pdf,.txt" class="glass-input w-full" style="padding:6px 10px;font-size:.75rem">
+            </div>
+            <button id="btnFoiaImport" onclick="importFoiaResponse()" class="btn-primary flex items-center gap-2" style="padding:8px 20px;font-size:.8rem">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              Import
+            </button>
+          </div>
+          <div id="foiaImportResult" class="hidden mt-3"></div>
+        </div>
       </div>
     </div>
 
@@ -569,8 +592,51 @@ function scoreBadge(score){if(score==null||score===undefined)return'<span class=
 // ── FOIA ────
 let foiaOpen=true;
 let foiaBodyText='';
-async function loadFoiaMunicipalities(){try{const data=await(await fetch('/api/foia/municipalities')).json();if(!data.length)return;document.getElementById('foiaPanel').classList.remove('hidden');const list=document.getElementById('foiaList');list.innerHTML='';data.forEach(m=>{if(m.foiaBody)foiaBodyText=m.foiaBody;const div=document.createElement('div');div.className='glass-card';div.style='display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;gap:8px';if(m.foiaType==='email'){div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(m.email)}</div></div><a href="${esc(m.mailtoUrl)}" class="btn-primary" style="padding:6px 14px;font-size:.7rem;border-radius:8px;white-space:nowrap">Send Request</a>`;}else{const portalName=m.portalUrl.includes('nextrequest')?'NextRequest Portal':m.portalUrl.includes('justfoia')?'JustFOIA Portal':'FOIA Portal';div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${portalName}</div></div><div class="flex items-center gap-1"><button onclick="copyFoiaText(this)" class="btn-glass" style="padding:4px 8px;font-size:.6rem;border-radius:6px" title="Copy FOIA request text to clipboard">📋 Copy</button><a href="${esc(m.portalUrl)}" target="_blank" class="btn-glass" style="padding:6px 14px;font-size:.7rem;white-space:nowrap">Open Portal</a></div>`;}list.appendChild(div);});}catch(e){}}
+async function loadFoiaMunicipalities(){try{document.getElementById('foiaPanel').classList.remove('hidden');const data=await(await fetch('/api/foia/municipalities')).json();const list=document.getElementById('foiaList');list.innerHTML='';const importSelect=document.getElementById('foiaImportMuni');const muniNames=new Set();data.forEach(m=>{if(m.foiaBody)foiaBodyText=m.foiaBody;muniNames.add(m.name);const opt=document.createElement('option');opt.value=m.name;opt.textContent=m.name;importSelect.appendChild(opt);const div=document.createElement('div');div.className='glass-card';div.style='display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;gap:8px';if(m.foiaType==='email'){div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(m.email)}</div></div><a href="${esc(m.mailtoUrl)}" class="btn-primary" style="padding:6px 14px;font-size:.7rem;border-radius:8px;white-space:nowrap">Send Request</a>`;}else{const portalName=m.portalUrl.includes('nextrequest')?'NextRequest Portal':m.portalUrl.includes('justfoia')?'JustFOIA Portal':'FOIA Portal';div.innerHTML=`<div><div class="font-medium" style="font-size:.8rem;color:var(--text-bright)">${esc(m.name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${portalName}</div></div><div class="flex items-center gap-1"><button onclick="copyFoiaText(this)" class="btn-glass" style="padding:4px 8px;font-size:.6rem;border-radius:6px" title="Copy FOIA request text to clipboard">📋 Copy</button><a href="${esc(m.portalUrl)}" target="_blank" class="btn-glass" style="padding:6px 14px;font-size:.7rem;white-space:nowrap">Open Portal</a></div>`;}list.appendChild(div);});
+  // Also add all municipalities from filter options that aren't already in the FOIA list
+  try{const opts=await(await fetch('/api/filters/options')).json();(opts.municipalities||[]).forEach(m=>{if(!muniNames.has(m)){const opt=document.createElement('option');opt.value=m;opt.textContent=m;importSelect.appendChild(opt);}});}catch(e){}
+  // Add "Other" option for manual entry
+  const otherOpt=document.createElement('option');otherOpt.value='__other__';otherOpt.textContent='Other (type name)...';importSelect.appendChild(otherOpt);
+  importSelect.addEventListener('change',function(){if(this.value==='__other__'){const name=prompt('Enter municipality name:');if(name&&name.trim()){const opt=document.createElement('option');opt.value=name.trim();opt.textContent=name.trim();this.insertBefore(opt,this.lastChild);this.value=name.trim();}else{this.value='';}}});
+  }catch(e){}}
 function copyFoiaText(btn){navigator.clipboard.writeText(foiaBodyText).then(()=>{btn.textContent='✓ Copied';btn.style.borderColor='rgba(34,197,94,0.4)';setTimeout(()=>{btn.textContent='📋 Copy';btn.style.borderColor='';},2000);});}
+
+// ── FOIA Import ────
+async function importFoiaResponse(){
+  const muni=document.getElementById('foiaImportMuni').value;
+  const fileInput=document.getElementById('foiaImportFile');
+  const resultDiv=document.getElementById('foiaImportResult');
+  const btn=document.getElementById('btnFoiaImport');
+  if(!muni){resultDiv.classList.remove('hidden');resultDiv.innerHTML='<div style="color:#FCA5A5;font-size:.8rem">Please select a municipality.</div>';return;}
+  if(!fileInput.files.length){resultDiv.classList.remove('hidden');resultDiv.innerHTML='<div style="color:#FCA5A5;font-size:.8rem">Please select a file to upload.</div>';return;}
+  btn.disabled=true;btn.style.opacity='0.5';btn.innerHTML='<svg class="spinner" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Importing...';
+  const formData=new FormData();
+  formData.append('file',fileInput.files[0]);
+  formData.append('municipality',muni);
+  try{
+    const resp=await fetch('/api/foia/import',{method:'POST',body:formData});
+    const data=await resp.json();
+    resultDiv.classList.remove('hidden');
+    if(!resp.ok){
+      let msg=`<div style="color:#FCA5A5;font-size:.8rem">${esc(data.error)}</div>`;
+      if(data.headers)msg+=`<div style="color:var(--text-dim);font-size:.7rem;margin-top:4px">Columns found: ${data.headers.map(h=>esc(h)).join(', ')}</div>`;
+      if(data.rawText)msg+=`<details style="margin-top:8px"><summary style="color:var(--text-dim);font-size:.7rem;cursor:pointer">Show raw PDF text</summary><pre style="color:var(--text-dim);font-size:.65rem;max-height:200px;overflow:auto;margin-top:4px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px;white-space:pre-wrap">${esc(data.rawText)}</pre></details>`;
+      resultDiv.innerHTML=msg;
+    }else{
+      let colInfo=data.mappedColumns?data.mappedColumns.map(c=>`<span class="badge badge-blue" style="margin:2px">${esc(c.column)} → ${esc(c.mappedTo)}</span>`).join(' '):'';
+      resultDiv.innerHTML=`<div style="color:#4ADE80;font-size:.8rem;font-weight:600">${esc(data.message)}</div>
+        <div style="font-size:.75rem;color:var(--text-dim);margin-top:4px">${data.inserted} new, ${data.updated} updated, ${data.skipped} skipped of ${data.totalRows} rows</div>
+        ${colInfo?'<div style="margin-top:6px;font-size:.7rem;color:var(--text-dim)">Column mapping: '+colInfo+'</div>':''}`;
+      fileInput.value='';
+      loadPermits();loadStats();
+    }
+  }catch(err){
+    resultDiv.classList.remove('hidden');
+    resultDiv.innerHTML=`<div style="color:#FCA5A5;font-size:.8rem">Upload failed: ${esc(err.message)}</div>`;
+  }finally{
+    btn.disabled=false;btn.style.opacity='1';btn.innerHTML='<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg> Import';
+  }
+}
 function toggleFoiaPanel(){foiaOpen=!foiaOpen;document.getElementById('foiaBody').style.display=foiaOpen?'':'none';document.getElementById('foiaToggle').innerHTML=foiaOpen?'&#x25BC;':'&#x25B6;';}
 
 // ── Clear All (triple-click) ────

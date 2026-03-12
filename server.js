@@ -15,6 +15,9 @@ const crypto = require('crypto');
 const builderCache = require('./scraper/builder-cache');
 const buyerList = require('./scraper/buyer-list');
 const dailyEmail = require('./scraper/daily-email');
+const foiaParser = require('./scraper/foia-parser');
+const multer = require('multer');
+const upload = multer({ dest: require('os').tmpdir(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const app = express();
 app.use(express.json());
@@ -212,6 +215,45 @@ app.get('/api/foia/municipalities', (req, res) => {
       return entry;
     });
   res.json(result);
+});
+
+// ─── FOIA Import API ────────────────────────────────────────────────────────
+app.post('/api/foia/import', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const municipality = req.body.municipality;
+    if (!municipality) return res.status(400).json({ error: 'Municipality is required' });
+
+    const result = await foiaParser.parseFile(req.file.path, municipality);
+
+    // Clean up temp file
+    try { require('fs').unlinkSync(req.file.path); } catch (e) {}
+
+    if (result.error && result.permits.length === 0) {
+      return res.status(400).json(result);
+    }
+
+    // Upsert each permit into the database
+    let inserted = 0, updated = 0, skipped = 0;
+    for (const permit of result.permits) {
+      const r = await db.upsertPermit(permit);
+      if (r.action === 'inserted') inserted++;
+      else if (r.action === 'updated') updated++;
+      else skipped++;
+    }
+
+    res.json({
+      message: `Imported ${inserted + updated} permits from FOIA response`,
+      inserted,
+      updated,
+      skipped: skipped + result.skippedRows,
+      totalRows: result.totalRows,
+      mappedColumns: result.mappedColumns,
+    });
+  } catch (err) {
+    console.error('FOIA import error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Stats API ───────────────────────────────────────────────────────────────
