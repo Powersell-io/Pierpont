@@ -106,11 +106,43 @@ app.get('/api/permits', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Today's new permits — must be before :id param route
+app.get('/api/permits/today', async (req, res) => {
+  try { res.json(await db.getTodaysNewPermits()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/permits/:id', async (req, res) => {
   try {
     const permit = await db.getPermitById(req.params.id);
     if (!permit) return res.status(404).json({ error: 'Not found' });
     res.json(permit);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Delete permits ──────────────────────────────────────────────────────────
+app.delete('/api/permits/:id', async (req, res) => {
+  try {
+    await db.deletePermit(Number(req.params.id));
+    res.json({ message: 'Permit deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/permits/delete-batch', async (req, res) => {
+  try {
+    const ids = req.body?.ids;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
+    await db.deletePermits(ids.map(Number));
+    res.json({ message: `Deleted ${ids.length} permits` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Email sent toggle ──────────────────────────────────────────────────────
+app.patch('/api/permits/:id/email-sent', async (req, res) => {
+  try {
+    const sent = req.body?.sent !== undefined ? req.body.sent : true;
+    await db.toggleEmailSent(Number(req.params.id), sent);
+    res.json({ message: 'Updated', email_sent: sent ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -381,12 +413,12 @@ app.post('/api/permits/:id/lookup-builder', async (req, res) => {
 
 // ─── Auto-Schedule (7am, 1pm, 6pm EST) ──────────────────────────────────────
 let scheduleEnabled = true;
-const scheduleTimes = ['7:00', '13:00', '18:00']; // EST
+const scheduleTimes = ['7:00', '19:00']; // EST — 7am and 7pm
 const scheduleHistory = []; // last 20 scheduled runs
 
 async function runScheduledScrape() {
   const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-  console.log(`\n⏰ Scheduled scrape triggered at ${now} EST`);
+  console.log(`\n⏰ Scheduled scrape triggered at ${now} EST (today only)`);
   if (scrapeInProgress) {
     console.log('⏭️  Skipping — scrape already in progress');
     scheduleHistory.unshift({ time: now, status: 'skipped', reason: 'scrape already in progress' });
@@ -396,7 +428,9 @@ async function runScheduledScrape() {
   scheduleHistory.unshift({ time: now, status: 'running' });
   if (scheduleHistory.length > 20) scheduleHistory.pop();
   try {
-    const result = await scraper.runAllScrapers();
+    // Scheduled runs only scrape today's permits (not the full 30 days)
+    const today = new Date().toISOString().split('T')[0];
+    const result = await scraper.runAllScrapers({ dateFrom: today, dateTo: today, days: 1 });
     scheduleHistory[0].status = 'completed';
     scheduleHistory[0].permits = result.permitsFound;
     scheduleHistory[0].newPermits = result.permitsNew;
@@ -410,11 +444,10 @@ async function runScheduledScrape() {
   }
 }
 
-// Schedule: 7:00 AM, 1:00 PM, 6:00 PM EST (America/New_York)
+// Schedule: 7:00 AM and 7:00 PM EST (America/New_York) — today's permits only
 const cronJobs = [
   cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
-  cron.schedule('0 13 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
-  cron.schedule('0 18 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
+  cron.schedule('0 19 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
   // Daily leads email — 7:30 AM EST Mon-Fri (after scrape finishes)
   cron.schedule('30 7 * * 1-5', async () => {
     try { await dailyEmail.sendDailyEmail(); } catch (err) { console.error('[Email] Cron error:', err.message); }
@@ -478,7 +511,7 @@ async function start() {
     const blStats = buyerList.stats();
     console.log(`📋 Buyer lists loaded: ${blStats.totalEntries} entries (${blStats.withPhone} phones, ${blStats.withEmail} emails)`);
     console.log('🔍 Ready to scrape permits');
-    console.log('⏰ Auto-scrape scheduled: 7:00 AM, 1:00 PM, 6:00 PM EST');
+    console.log('⏰ Auto-scrape scheduled: 7:00 AM, 7:00 PM EST (today only)');
     console.log(`📧 Daily email: ${process.env.EMAIL_FROM ? 'configured' : 'NOT configured (set EMAIL_FROM, EMAIL_TO, EMAIL_APP_PASSWORD)'}`);
     if (process.env.EMAIL_FROM) console.log(`   From: ${process.env.EMAIL_FROM} → To: ${process.env.EMAIL_TO || process.env.EMAIL_FROM}`);
     console.log('');

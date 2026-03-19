@@ -95,6 +95,10 @@ function initSchema() {
   try {
     db.run(`ALTER TABLE permits ADD COLUMN emailed_at TEXT`);
   } catch (e) {}
+  // Migration: add email_sent column for individual email tracking
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN email_sent INTEGER DEFAULT 0`);
+  } catch (e) {}
   db.run(`CREATE INDEX IF NOT EXISTS idx_opportunity_score ON permits(opportunity_score)`);
 
   db.run(`
@@ -194,6 +198,11 @@ async function upsertPermit(permit) {
   // Filter out excluded builders (national/production builders)
   if (isExcludedBuilder(p.builder_name, p.builder_company)) {
     return { action: 'skipped', reason: 'excluded builder' };
+  }
+
+  // Filter: only keep permits >= $200K or with no value
+  if (p.project_value !== null && p.project_value > 0 && p.project_value < 200000) {
+    return { action: 'skipped', reason: 'below $200K threshold' };
   }
 
   // Auto-populate contact info from builder cache
@@ -481,6 +490,33 @@ async function markPermitsEmailed(ids) {
   saveToFile();
 }
 
+// ─── Delete individual permit ──────────────────────────────────────────────
+async function deletePermit(id) {
+  await getDb();
+  execute('DELETE FROM permits WHERE id = ?', [id]);
+}
+
+// ─── Delete multiple permits ──────────────────────────────────────────────
+async function deletePermits(ids) {
+  await getDb();
+  if (!ids || ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  execute(`DELETE FROM permits WHERE id IN (${placeholders})`, ids);
+}
+
+// ─── Toggle email_sent for a permit ───────────────────────────────────────
+async function toggleEmailSent(id, sent) {
+  await getDb();
+  execute('UPDATE permits SET email_sent = ? WHERE id = ?', [sent ? 1 : 0, id]);
+}
+
+// ─── Get today's new permits (for notification panel) ─────────────────────
+async function getTodaysNewPermits() {
+  await getDb();
+  const today = new Date().toISOString().split('T')[0];
+  return queryAll(`SELECT * FROM permits WHERE date(scraped_at) = ? ORDER BY project_value DESC`, [today]);
+}
+
 async function clearAllData() {
   await getDb();
   execute('DELETE FROM permits');
@@ -490,4 +526,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, getTodaysNewPermits, clearAllData, close };

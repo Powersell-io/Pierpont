@@ -239,7 +239,7 @@
             <span id="lookupIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
             <span id="lookupText">Lookup Builders</span>
           </button>
-          <button id="btnSchedule" onclick="toggleSchedule()" class="btn-glass flex items-center gap-2" title="Auto-scrape at 7am, 1pm, 6pm EST">
+          <button id="btnSchedule" onclick="toggleSchedule()" class="btn-glass flex items-center gap-2" title="Auto-scrape at 7am & 7pm EST (today only)">
             <span id="scheduleIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
             <span id="scheduleText">Auto: ON</span>
           </button>
@@ -273,13 +273,25 @@
         <div class="stat-value mt-2" id="statAvgValue">$0</div>
       </div>
       <div class="glass-card p-5">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">$300K+ Projects</div>
+        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">$200K+ Projects</div>
         <div class="stat-value highlight mt-2" id="statHighValue">0</div>
       </div>
       <div class="glass-card p-5">
         <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Date Range</div>
         <div class="text-sm font-bold mt-2" style="font-family:'Fira Code',monospace;color:var(--text)" id="statDateRange">&mdash;</div>
       </div>
+    </div>
+
+    <!-- New Permits Notification Panel -->
+    <div id="notificationPanel" class="glass-card p-5 mb-6 hidden" style="border-left:3px solid var(--blue)">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold" style="color:var(--blue-light)">New Permits Today</h3>
+        <div class="flex gap-2">
+          <button onclick="markSelectedNotifSent()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Mark Sent</button>
+          <button onclick="dismissNotifications()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Dismiss</button>
+        </div>
+      </div>
+      <div id="notificationList" style="max-height:300px;overflow-y:auto"></div>
     </div>
 
     <!-- Active Filter Chips -->
@@ -333,6 +345,7 @@
         <div class="flex gap-2">
           <button onclick="resetFilters()" class="btn-glass">Reset</button>
           <button onclick="exportCSV()" class="btn-glass flex items-center gap-1.5"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> CSV</button>
+          <button id="btnDeleteSelected" onclick="deleteSelected()" class="btn-danger hidden flex items-center gap-1.5" style="font-size:.8rem"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg> <span id="deleteCount">Delete Selected</span></button>
           <button id="btnClear" onclick="handleClearClick()" class="btn-danger">Clear All</button>
         </div>
       </div>
@@ -380,6 +393,7 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th style="width:30px;text-align:center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
               <th class="sort-header" onclick="sortBy('address')">Address<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
               <th class="sort-header" onclick="sortBy('municipality')">Municipality<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
               <th class="sort-header" onclick="sortBy('builder_name')">Builder<span class="sort-arrow" id="sort-builder_name">&#x25B2;</span></th>
@@ -392,12 +406,12 @@
               <th class="sort-header" onclick="sortBy('inspection_date')">Insp Date<span class="sort-arrow" id="sort-inspection_date">&#x25B2;</span></th>
               <th>Status</th>
               <th class="sort-header" style="text-align:center" onclick="sortBy('opportunity_score')">Score<span class="sort-arrow active" id="sort-opportunity_score">&#x25BC;</span></th>
-              <th class="sort-header" onclick="sortBy('permit_number')">Permit #<span class="sort-arrow" id="sort-permit_number">&#x25B2;</span></th>
-              <th>Detail</th>
+              <th style="text-align:center">Emailed</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="permitsTableBody">
-            <tr><td colspan="14" class="px-6 py-16 text-center" style="color:var(--text-dim)">
+            <tr><td colspan="15" class="px-6 py-16 text-center" style="color:var(--text-dim)">
               <svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
               <div class="text-base font-medium" style="color:var(--text)">No permits loaded</div>
               <div class="text-sm mt-1">Click <strong style="color:var(--blue)">Run Scraper</strong> to fetch permits.</div>
@@ -425,7 +439,7 @@ let filters = { search:'', max_drive_time:'', municipality:'', date_from:'', dat
 
 const ENERGOV_BASE = 'https://egcss.charleston-sc.gov/EnerGov_Prod/selfservice';
 
-document.addEventListener('DOMContentLoaded', () => { loadFilterOptions(); loadPermits(); loadStats(); loadFoiaMunicipalities(); loadScheduleStatus(); });
+document.addEventListener('DOMContentLoaded', () => { loadFilterOptions(); loadPermits(); loadStats(); loadFoiaMunicipalities(); loadScheduleStatus(); loadTodaysPermits(); });
 
 async function loadFilterOptions() {
   try {
@@ -474,31 +488,109 @@ function buildQueryParams(){const p=new URLSearchParams();if(filters.search)p.se
 
 async function loadPermits(){readFiltersFromUI();const p=buildQueryParams();p.set('sort_by',currentSort.column);p.set('sort_order',currentSort.order);p.set('page',currentPage);p.set('per_page',50);try{const r=await(await fetch(`/api/permits?${p}`)).json();renderTable(r.data);renderPagination(r.pagination);}catch(e){console.error(e);}}
 
-async function loadStats(){try{const s=await(await fetch('/api/stats')).json();document.getElementById('statTotal').textContent=(s.total_permits||0).toLocaleString();document.getElementById('statAvgValue').textContent=fmtCurrency(s.avg_value);if(s.earliest_date&&s.latest_date)document.getElementById('statDateRange').textContent=`${fmtDateShort(s.earliest_date)} - ${fmtDateShort(s.latest_date)}`;if(s.last_run){document.getElementById('lastScrapedInfo').classList.remove('hidden');document.getElementById('lastScrapedTime').textContent=new Date((s.last_run.completed_at||s.last_run.started_at)+'Z').toLocaleString();}try{const hv=await(await fetch('/api/permits?min_value=300000&per_page=1')).json();document.getElementById('statHighValue').textContent=(hv.pagination?.total||0).toLocaleString();}catch(e){}}catch(e){console.error(e);}}
+async function loadStats(){try{const s=await(await fetch('/api/stats')).json();document.getElementById('statTotal').textContent=(s.total_permits||0).toLocaleString();document.getElementById('statAvgValue').textContent=fmtCurrency(s.avg_value);if(s.earliest_date&&s.latest_date)document.getElementById('statDateRange').textContent=`${fmtDateShort(s.earliest_date)} - ${fmtDateShort(s.latest_date)}`;if(s.last_run){document.getElementById('lastScrapedInfo').classList.remove('hidden');document.getElementById('lastScrapedTime').textContent=new Date((s.last_run.completed_at||s.last_run.started_at)+'Z').toLocaleString();}try{const hv=await(await fetch('/api/permits?min_value=200000&per_page=1')).json();document.getElementById('statHighValue').textContent=(hv.pagination?.total||0).toLocaleString();}catch(e){}}catch(e){console.error(e);}}
 
 // ── Builder Lookup (single) ────
 async function lookupBuilder(permitId,btn){btn.disabled=true;btn.textContent='Searching...';btn.style.opacity='0.5';try{const resp=await fetch(`/api/permits/${permitId}/lookup-builder`,{method:'POST'});const data=await resp.json();if(!resp.ok){alert(data.error||'Lookup failed');return;}const phoneCell=document.getElementById(`phone-${permitId}`);const emailCell=document.getElementById(`email-${permitId}`);const websiteCell=document.getElementById(`website-${permitId}`);if(data.phone&&phoneCell)phoneCell.innerHTML=phone(data.phone);if(data.email&&emailCell)emailCell.innerHTML=email(data.email);if(data.website&&websiteCell){const host=new URL(data.website).hostname.replace(/^www\./,'');websiteCell.innerHTML=`<a href="${esc(data.website)}" target="_blank" onclick="event.stopPropagation()">${esc(host)}</a>`;}if(data.phone||data.email||data.website){btn.textContent='Found!';btn.style.background='rgba(34,197,94,0.15)';btn.style.color='#4ADE80';}else{btn.textContent='Not found';btn.style.opacity='0.4';}}catch(err){console.error(err);btn.textContent='Error';}}
 
+// ── Selected permits tracking ────
+let selectedPermits = new Set();
+function toggleSelectAll(cb){
+  const boxes=document.querySelectorAll('.permit-checkbox');
+  boxes.forEach(b=>{b.checked=cb.checked;if(cb.checked)selectedPermits.add(Number(b.dataset.id));else selectedPermits.delete(Number(b.dataset.id));});
+  updateDeleteBtn();
+}
+function togglePermitSelect(cb){
+  const id=Number(cb.dataset.id);
+  if(cb.checked)selectedPermits.add(id);else selectedPermits.delete(id);
+  updateDeleteBtn();
+}
+function updateDeleteBtn(){
+  const btn=document.getElementById('btnDeleteSelected');
+  const count=selectedPermits.size;
+  if(count>0){btn.classList.remove('hidden');document.getElementById('deleteCount').textContent=`Delete (${count})`;}
+  else{btn.classList.add('hidden');}
+}
+async function deleteSelected(){
+  if(selectedPermits.size===0)return;
+  if(!confirm(`Delete ${selectedPermits.size} selected permit(s)?`))return;
+  try{
+    await fetch('/api/permits/delete-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selectedPermits]})});
+    selectedPermits.clear();updateDeleteBtn();document.getElementById('selectAll').checked=false;loadPermits();loadStats();
+  }catch(e){alert('Delete failed: '+e.message);}
+}
+
+// ── Email template (mailto:) ────
+function buildMailtoUrl(permit){
+  const builderName=permit.builder_name||permit.builder_company||'Builder';
+  const address=permit.address||'[Address]';
+  const subject=encodeURIComponent(`Drywall Bid – ${address}`);
+  const body=encodeURIComponent(`Hello ${builderName},
+
+We noticed an upcoming project at ${address} and wanted to reach out to see if you are currently accepting bids for the drywall scope.
+
+Pierpont Construction has been providing drywall services in the Charleston area since 2004, specializing in both new construction and remodels. We currently drywall 10-20 homes per month and support over 80 builders and contractors throughout the area.
+
+Our team includes 4 full-time drywall repair and touch-up technicians, allowing us to maintain tight schedules and deliver consistent Level 4 and Level 5 finishes. After priming, we also perform detailed point ups and touch-ups using high powered lights to find any imperfections to ensure the highest quality finish.
+
+If this project is currently being bid, we would appreciate the opportunity to provide a drywall estimate. If you could send over plans, square footage, or scope, we can quickly review and return pricing. We can also measure in person if the house is framed up!
+
+Below are a few references for your review:
+
+• Greg – St Pierre Construction – (843) 478-6005
+• Sam Rhodes – Rhodes Construction – (843) 442-1162
+• Michael Daly – Daly & Sawyer – (843) 224-6131
+• Zac – Naramore Construction – (843) 296-4579
+• Jay Sifly – Sifly Homes – (843) 303-1222
+
+Pierpont Construction is fully insured, carrying both Worker's Comp and Liability insurance.
+
+We look forward to connecting and hopefully working together on this project.
+
+Best regards,
+
+Steven Dolloff
+Owner / President
+Pierpont Construction
+(843) 200-1518
+PierpontConstruction@gmail.com
+
+Justin Dolloff
+Manager
+(843) 566-5515
+Justin.PierpontConstruction@gmail.com`);
+  const to=permit.builder_email||'';
+  return `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
+}
+
+async function toggleEmailSent(id,cb){
+  const sent=cb.checked;
+  try{
+    await fetch(`/api/permits/${id}/email-sent`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sent})});
+  }catch(e){cb.checked=!sent;}
+}
+
 // ── Table ────
 function renderTable(permits){
   const tbody=document.getElementById('permitsTableBody');
-  if(!permits||!permits.length){tbody.innerHTML=`<tr><td colspan="14" class="px-6 py-16 text-center" style="color:var(--text-dim)"><svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><path d="M20 12H4M12 4v16"/></svg><div class="text-base font-medium" style="color:var(--text)">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;return;}
+  selectedPermits.clear();updateDeleteBtn();document.getElementById('selectAll').checked=false;
+  if(!permits||!permits.length){tbody.innerHTML=`<tr><td colspan="15" class="px-6 py-16 text-center" style="color:var(--text-dim)"><svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><path d="M20 12H4M12 4v16"/></svg><div class="text-base font-medium" style="color:var(--text)">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;return;}
   tbody.innerHTML='';
   permits.forEach(p=>{
-    const isHV=p.project_value&&p.project_value>=300000;
+    const isHV=p.project_value&&p.project_value>=200000;
     const tr=document.createElement('tr');
     tr.className=`cursor-pointer${isHV?' high-value':''}`;
-    tr.onclick=()=>{const d=document.getElementById(`d-${p.id}`);if(d)d.classList.toggle('open');};
-
-    let detailLink='';
-    try{const raw=typeof p.raw_data==='string'?JSON.parse(p.raw_data):p.raw_data;const caseId=raw?.CaseId||raw?.Id||raw?.InspectionId;if(caseId){const detailUrl=raw?._detailUrl||`${ENERGOV_BASE}#/inspectionDetail/inspection/${caseId}`;detailLink=`<a href="${esc(detailUrl)}" target="_blank" onclick="event.stopPropagation()" style="font-family:'Fira Code',monospace;font-size:.65rem">View</a>`;}}catch(e){}
+    tr.onclick=(e)=>{if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.closest('button')||e.target.closest('a'))return;const d=document.getElementById(`d-${p.id}`);if(d)d.classList.toggle('open');};
 
     let bd='';
     if(p.builder_name&&p.builder_company)bd=`<div class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(p.builder_company)}</div>`;
     else if(p.builder_name||p.builder_company)bd=`<span class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name||p.builder_company)}</span>`;
     else bd='<span class="empty-cell">&mdash;</span>';
 
+    const emailSentChecked=p.email_sent?'checked':'';
+
     tr.innerHTML=`
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="permit-checkbox" data-id="${p.id}" onchange="togglePermitSelect(this)"></td>
       <td class="font-medium" style="color:var(--text-bright);max-width:200px" title="${esc(p.address)}"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div></td>
       <td style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td>${bd}</td>
@@ -511,8 +603,8 @@ function renderTable(permits){
       <td style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td>${statusBadge(p.inspection_status)}</td>
       <td style="text-align:center">${scoreBadge(p.opportunity_score)}</td>
-      <td style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dim)">${esc(p.permit_number)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td>${detailLink||'<span class="empty-cell">&mdash;</span>'}</td>`;
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)" title="Mark as emailed" style="cursor:pointer"></td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap"><a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:3px 8px;font-size:.65rem;border-radius:6px;display:inline-flex;align-items:center;gap:3px" title="Send drywall bid email"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a></td>`;
     tbody.appendChild(tr);
 
     // Expandable detail
@@ -520,7 +612,7 @@ function renderTable(permits){
     try{const raw=typeof p.raw_data==='string'?JSON.parse(p.raw_data):p.raw_data;const subs=raw?._contractors||[];if(subs.length)subsHtml=subs.map(c=>esc(c.name)+(c.company?` <span style="color:var(--text-dim)">(${esc(c.company)})</span>`:'')).join(', ');const allC=raw?._allContacts||[];if(allC.length)subsHtml=allC.map(c=>`<span class="font-medium">${esc(c.name||'?')}</span> <span style="color:var(--text-dim)">[${esc(c.type)}]</span>${c.company?' @ '+esc(c.company):''}`).join('<br>');if(raw?._linkedPermit){const lpUrl=raw._linkedPermitUrl;linkedPermitHtml=lpUrl?`<a href="${esc(lpUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(raw._linkedPermit)}</a>`:esc(raw._linkedPermit);}if(raw?._dataSource){const src=raw._dataSource==='building_permit'?'Building Permit':'Inspection Contacts';dataSourceHtml=`<span class="badge ${raw._dataSource==='building_permit'?'badge-green':'badge-blue'}">${src}</span>`;}}catch(e){}
 
     const dr=document.createElement('tr');dr.id=`d-${p.id}`;dr.className='detail-row';
-    dr.innerHTML=`<td colspan="14" style="padding:16px 24px;background:rgba(43,108,176,0.03)"><div class="grid grid-cols-2 md:grid-cols-4 gap-4" style="font-size:.8rem">
+    dr.innerHTML=`<td colspan="15" style="padding:16px 24px;background:rgba(43,108,176,0.03)"><div class="grid grid-cols-2 md:grid-cols-4 gap-4" style="font-size:.8rem">
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Permit #</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.75rem">${esc(p.permit_number)||'&mdash;'}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Linked Building Permit</span><span class="font-medium">${linkedPermitHtml}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Opportunity Score</span><span class="font-medium">${scoreBadge(p.opportunity_score)} ${dataSourceHtml}</span></div>
@@ -547,7 +639,7 @@ function sortBy(col){document.querySelectorAll('.sort-arrow').forEach(e=>{e.clas
 // ── Scraper ────
 async function startScrape(){const btn=document.getElementById('btnScrape');btn.disabled=true;btn.style.opacity='0.5';document.getElementById('scrapeIcon').innerHTML='<svg class="spinner" width="16" height="16" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';document.getElementById('scrapeText').textContent='Scraping...';document.getElementById('scrapeProgress').classList.remove('hidden');try{await fetch('/api/scrape',{method:'POST'});scrapeCheckInterval=setInterval(checkScrapeStatus,2000);}catch(e){resetScrapeBtn();}}
 
-async function checkScrapeStatus(){try{const s=await(await fetch('/api/scrape/status')).json();document.getElementById('scrapeStatusText').textContent=s.running?`Scraping: ${s.current_municipality||'...'}`:'Scrape complete!';document.getElementById('scrapeDetailText').textContent=s.running?`${s.municipalities_succeeded||0}/${s.municipalities_attempted||0} municipalities`:`${s.permits_found||0} permits (${s.permits_new||0} new)`;document.getElementById('scrapeCountText').textContent=`${s.permits_found||0} found`;if(!s.running){clearInterval(scrapeCheckInterval);setTimeout(()=>{document.getElementById('scrapeProgress').classList.add('hidden');resetScrapeBtn();loadFilterOptions();loadPermits();loadStats();},2000);}}catch(e){}}
+async function checkScrapeStatus(){try{const s=await(await fetch('/api/scrape/status')).json();document.getElementById('scrapeStatusText').textContent=s.running?`Scraping: ${s.current_municipality||'...'}`:'Scrape complete!';document.getElementById('scrapeDetailText').textContent=s.running?`${s.municipalities_succeeded||0}/${s.municipalities_attempted||0} municipalities`:`${s.permits_found||0} permits (${s.permits_new||0} new)`;document.getElementById('scrapeCountText').textContent=`${s.permits_found||0} found`;if(!s.running){clearInterval(scrapeCheckInterval);setTimeout(()=>{document.getElementById('scrapeProgress').classList.add('hidden');resetScrapeBtn();loadFilterOptions();loadPermits();loadStats();loadTodaysPermits();},2000);}}catch(e){}}
 function resetScrapeBtn(){const b=document.getElementById('btnScrape');b.disabled=false;b.style.opacity='1';document.getElementById('scrapeIcon').innerHTML='<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';document.getElementById('scrapeText').textContent='Run Scraper';}
 
 // ── Builder Lookup (bulk) ────
@@ -568,7 +660,7 @@ function updateScheduleBtn(enabled){
   const txt=document.getElementById('scheduleText');
   txt.textContent=enabled?'Auto: ON':'Auto: OFF';
   btn.style.borderColor=enabled?'rgba(43,108,176,0.5)':'rgba(107,123,141,0.3)';
-  btn.title=enabled?'Auto-scrape ON — runs at 7am, 1pm, 6pm EST. Click to disable.':'Auto-scrape OFF. Click to enable.';
+  btn.title=enabled?'Auto-scrape ON — runs at 7am & 7pm EST (today only). Click to disable.':'Auto-scrape OFF. Click to enable.';
 }
 async function toggleSchedule(){
   try{
@@ -638,6 +730,42 @@ async function importFoiaResponse(){
   }
 }
 function toggleFoiaPanel(){foiaOpen=!foiaOpen;document.getElementById('foiaBody').style.display=foiaOpen?'':'none';document.getElementById('foiaToggle').innerHTML=foiaOpen?'&#x25BC;':'&#x25B6;';}
+
+// ── Today's Permits Notification ────
+async function loadTodaysPermits(){
+  try{
+    const permits=await(await fetch('/api/permits/today')).json();
+    const panel=document.getElementById('notificationPanel');
+    const list=document.getElementById('notificationList');
+    if(!permits||permits.length===0){panel.classList.add('hidden');return;}
+    // Only show permits not yet marked as email_sent
+    const unsent=permits.filter(p=>!p.email_sent);
+    if(unsent.length===0){panel.classList.add('hidden');return;}
+    panel.classList.remove('hidden');
+    list.innerHTML=unsent.map(p=>`
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:.8rem">
+        <input type="checkbox" class="notif-checkbox" data-id="${p.id}" style="cursor:pointer">
+        <div class="flex-1 min-w-0">
+          <span class="font-medium" style="color:var(--text-bright)">${esc(p.address)}</span>
+          <span style="color:var(--text-dim);font-size:.7rem"> — ${esc(p.builder_name||p.builder_company||'Unknown builder')}</span>
+          ${p.project_value?`<span style="color:var(--blue);font-family:'Fira Code',monospace;font-size:.7rem;margin-left:6px">${fmtCurrency(p.project_value)}</span>`:''}
+        </div>
+        <a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:3px 10px;font-size:.65rem;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:3px" title="Send email">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email
+        </a>
+      </div>`).join('');
+  }catch(e){console.error('Notification load error:',e);}
+}
+async function markSelectedNotifSent(){
+  const boxes=document.querySelectorAll('.notif-checkbox:checked');
+  if(boxes.length===0)return;
+  for(const cb of boxes){
+    const id=Number(cb.dataset.id);
+    try{await fetch(`/api/permits/${id}/email-sent`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sent:true})});}catch(e){}
+  }
+  loadTodaysPermits();loadPermits();
+}
+function dismissNotifications(){document.getElementById('notificationPanel').classList.add('hidden');}
 
 // ── Clear All (triple-click) ────
 let clearClickCount=0,clearTimer=null;
