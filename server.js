@@ -517,21 +517,38 @@ async function start() {
     if (process.env.EMAIL_FROM) console.log(`   From: ${process.env.EMAIL_FROM} → To: ${process.env.EMAIL_TO || process.env.EMAIL_FROM}`);
     console.log('');
 
-    // Auto-run scrape on launch (today's permits only, non-blocking)
-    console.log('🚀 Auto-running scrape on launch...');
-    setTimeout(() => {
-      if (!scrapeInProgress) {
-        scrapeInProgress = true;
-        const today = new Date().toISOString().split('T')[0];
-        scraper.runAllScrapers({ dateFrom: today, dateTo: today, days: 1 })
-          .then((result) => {
-            console.log(`🚀 Auto-scrape complete: ${result.permitsFound} permits (${result.permitsNew} new)`);
-            runBuilderLookupAfterScrape();
-          })
-          .catch((err) => console.error('Auto-scrape error:', err))
-          .finally(() => { scrapeInProgress = false; });
+    // Smart auto-scrape: only run if last scrape was >6 hours ago
+    // Otherwise just serve existing data — it's already in the DB
+    setTimeout(async () => {
+      try {
+        const lastRun = await db.getLatestScrapeRun();
+        const hoursSinceLast = lastRun?.completed_at
+          ? (Date.now() - new Date(lastRun.completed_at + 'Z').getTime()) / (1000 * 60 * 60)
+          : 999;
+
+        if (hoursSinceLast < 6) {
+          console.log(`✅ Last scrape was ${Math.round(hoursSinceLast)}h ago — skipping auto-scrape, data is fresh`);
+          // Still run builder lookup for any permits missing contact info
+          runBuilderLookupAfterScrape();
+          return;
+        }
+
+        console.log(`🚀 Last scrape was ${Math.round(hoursSinceLast)}h ago — running auto-scrape...`);
+        if (!scrapeInProgress) {
+          scrapeInProgress = true;
+          const today = new Date().toISOString().split('T')[0];
+          scraper.runAllScrapers({ dateFrom: today, dateTo: today, days: 1 })
+            .then((result) => {
+              console.log(`🚀 Auto-scrape complete: ${result.permitsFound} permits (${result.permitsNew} new)`);
+              runBuilderLookupAfterScrape();
+            })
+            .catch((err) => console.error('Auto-scrape error:', err))
+            .finally(() => { scrapeInProgress = false; });
+        }
+      } catch (err) {
+        console.error('Auto-scrape check error:', err);
       }
-    }, 3000); // 3 second delay to let server fully initialize
+    }, 3000);
   });
 }
 start();
