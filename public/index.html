@@ -243,6 +243,14 @@
             <span id="scheduleIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
             <span id="scheduleText">Auto: ON</span>
           </button>
+          <button id="btnSender" onclick="cycleSender()" class="btn-glass flex items-center gap-2" title="Who is sending emails">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
+            <span id="senderText">Steven</span>
+          </button>
+          <button id="btnSig" onclick="toggleSig()" class="btn-glass flex items-center gap-2" title="Include signature in email template">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            <span id="sigText">Sig: ON</span>
+          </button>
         </div>
       </div>
     </div>
@@ -541,6 +549,26 @@ async function deleteSelected(){
 }
 
 // ── Email template (mailto:) ────
+// ── Email sender & signature settings ────
+let emailSender='steven'; // 'steven' | 'justin' | 'both'
+let emailSigOn=true;
+
+function cycleSender(){
+  if(emailSender==='steven')emailSender='justin';
+  else if(emailSender==='justin')emailSender='both';
+  else emailSender='steven';
+  const btn=document.getElementById('btnSender');
+  const txt=document.getElementById('senderText');
+  const labels={steven:'Steven',justin:'Justin',both:'Both'};
+  txt.textContent=labels[emailSender];
+  btn.title='Sending as: '+labels[emailSender]+'. Click to change.';
+}
+function toggleSig(){
+  emailSigOn=!emailSigOn;
+  document.getElementById('sigText').textContent=emailSigOn?'Sig: ON':'Sig: OFF';
+  document.getElementById('btnSig').style.borderColor=emailSigOn?'':'rgba(239,68,68,0.3)';
+}
+
 function cleanAddress(addr){
   if(!addr)return '[Address]';
   return addr.replace(/\s{2,}/g,' ').trim()
@@ -552,6 +580,21 @@ function buildMailtoUrl(permit){
   const builderName=firstName.charAt(0).toUpperCase()+firstName.slice(1).toLowerCase();
   const address=cleanAddress(permit.address);
   const subject=encodeURIComponent(`Drywall Bid – ${address}`);
+  const stevenSig=`Steven Dolloff
+Owner / President
+Pierpont Construction
+(843) 200-1518
+PierpontConstruction@gmail.com`;
+  const justinSig=`Justin Dolloff
+Manager
+(843) 566-5515
+Justin.PierpontConstruction@gmail.com`;
+  let sig='';
+  if(emailSigOn){
+    if(emailSender==='steven')sig=`\n\n${stevenSig}`;
+    else if(emailSender==='justin')sig=`\n\n${justinSig}`;
+    else sig=`\n\n${stevenSig}\n\n${justinSig}`;
+  }
   const body=encodeURIComponent(`Hey ${builderName},
 
 We noticed an upcoming project at ${address} and wanted to reach out to see if you are currently accepting bids for the drywall scope.
@@ -574,18 +617,7 @@ Pierpont Construction is fully insured, carrying both Worker's Comp and Liabilit
 
 We look forward to connecting and hopefully working together on this project.
 
-Best regards,
-
-Steven Dolloff
-Owner / President
-Pierpont Construction
-(843) 200-1518
-PierpontConstruction@gmail.com
-
-Justin Dolloff
-Manager
-(843) 566-5515
-Justin.PierpontConstruction@gmail.com`);
+Best regards,${sig}`);
   const to=permit.builder_email||'';
   return `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
 }
