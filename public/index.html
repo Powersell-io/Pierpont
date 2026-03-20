@@ -323,21 +323,43 @@
       </div>
     </div>
 
-    <!-- #3 AREA: Permits Table (today's highlighted) -->
-    <!-- New Permits Notification Panel -->
-    <div id="notificationPanel" class="glass-card p-5 mb-5 hidden" style="border-left:3px solid var(--blue)">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-bold" style="color:var(--text-bright)">New Permits Today</h3>
-        <div class="flex gap-2">
-          <button onclick="markSelectedNotifSent()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Mark Sent</button>
-          <button onclick="dismissNotifications()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Dismiss</button>
-        </div>
+    <!-- ═══ #3: INSPECTIONS TABLE ═══ -->
+    <h2 class="text-xl font-bold mb-4" style="color:var(--text-bright)">Inspections &mdash; Strapping Approved</h2>
+    <div class="glass-card overflow-hidden mb-6" style="border-radius:16px;position:relative">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:500px;background:url('/logo.png') no-repeat center center;background-size:contain;opacity:0.06;pointer-events:none;z-index:0"></div>
+      <div class="overflow-x-auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:30px;text-align:center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
+              <th class="sort-header" onclick="sortBy('address')">Address / Builder<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('municipality')">Area<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th class="sort-header" style="text-align:right" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('inspection_date')">Date<span class="sort-arrow active" id="sort-inspection_date">&#x25BC;</span></th>
+              <th>Status</th>
+              <th style="text-align:center">Emailed</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="permitsTableBody">
+            <tr><td colspan="10" class="px-6 py-16 text-center" style="color:var(--text-dim)">
+              <svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <div class="text-base font-medium" style="color:var(--text)">No permits loaded</div>
+              <div class="text-sm mt-1">Click <strong style="color:var(--blue)">Run Scraper</strong> to fetch permits.</div>
+            </td></tr>
+          </tbody>
+        </table>
       </div>
-      <div id="notificationList" style="max-height:300px;overflow-y:auto"></div>
+      <div id="pagination" class="hidden px-5 py-3 flex items-center justify-between" style="border-top:1px solid rgba(255,255,255,0.04);background:rgba(15,23,42,0.3)">
+        <div class="text-xs" style="color:var(--text-dim);font-family:'Fira Code',monospace" id="paginationInfo"></div>
+        <div class="flex gap-1" id="paginationButtons"></div>
+      </div>
     </div>
 
-    <!-- FOIA Panel (#4 AREA) -->
-    <div id="foiaPanel" class="glass-card p-5 mb-5 hidden">
+    <!-- ═══ #4: FOIA REQUESTS ═══ -->
+    <div id="foiaPanel" class="glass-card p-5 mb-6 hidden">
       <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="toggleFoiaPanel()">
         <h3 class="text-lg font-bold" style="color:var(--text-bright)">FOIA Requests</h3>
         <span id="foiaToggle" style="color:var(--text-dim)">&#x25BC;</span>
@@ -371,38 +393,16 @@
       </div>
     </div>
 
-    <!-- Results Table -->
-    <div class="glass-card overflow-hidden mb-6" style="border-radius:16px;position:relative">
-      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:500px;background:url('/logo.png') no-repeat center center;background-size:contain;opacity:0.06;pointer-events:none;z-index:0"></div>
-      <div class="overflow-x-auto">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width:30px;text-align:center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
-              <th class="sort-header" onclick="sortBy('address')">Address / Builder<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('municipality')">Area<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th class="sort-header" style="text-align:right" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('inspection_date')">Date<span class="sort-arrow active" id="sort-inspection_date">&#x25BC;</span></th>
-              <th>Status</th>
-              <th style="text-align:center">Emailed</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="permitsTableBody">
-            <tr><td colspan="10" class="px-6 py-16 text-center" style="color:var(--text-dim)">
-              <svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <div class="text-base font-medium" style="color:var(--text)">No permits loaded</div>
-              <div class="text-sm mt-1">Click <strong style="color:var(--blue)">Run Scraper</strong> to fetch permits.</div>
-            </td></tr>
-          </tbody>
-        </table>
+    <!-- ═══ #5: NEW PERMITS TODAY (last section) ═══ -->
+    <div id="notificationPanel" class="glass-card p-5 mb-6 hidden" style="border-left:3px solid var(--blue)">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-bold" style="color:var(--text-bright)">New Permits Today</h3>
+        <div class="flex gap-2">
+          <button onclick="markSelectedNotifSent()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Mark Sent</button>
+          <button onclick="dismissNotifications()" class="btn-glass flex items-center gap-1" style="padding:5px 12px;font-size:.75rem">Dismiss</button>
+        </div>
       </div>
-      <div id="pagination" class="hidden px-5 py-3 flex items-center justify-between" style="border-top:1px solid rgba(255,255,255,0.04);background:rgba(15,23,42,0.3)">
-        <div class="text-xs" style="color:var(--text-dim);font-family:'Fira Code',monospace" id="paginationInfo"></div>
-        <div class="flex gap-1" id="paginationButtons"></div>
-      </div>
+      <div id="notificationList" style="max-height:300px;overflow-y:auto"></div>
     </div>
   </main>
 
@@ -649,7 +649,7 @@ function renderTable(permits){
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="permit-checkbox" data-id="${p.id}" onchange="togglePermitSelect(this)"></td>
       <td style="max-width:260px" title="${esc(p.address)}">
         <div class="font-medium" style="color:var(--text-bright);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div>
-        <div style="font-size:.7rem;color:var(--blue-light);font-weight:500;margin-top:1px">${builderLabel}${contactName?` <span style="color:var(--text-dim);font-weight:400">(${contactName})</span>`:''}</div>
+        <div style="font-size:.7rem;color:#FDE047;font-weight:500;margin-top:1px">${builderLabel}${contactName?` <span style="color:var(--text-dim);font-weight:400">(${contactName})</span>`:''}</div>
       </td>
       <td style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td id="phone-${p.id}">${phone(bestPhone)}</td>
