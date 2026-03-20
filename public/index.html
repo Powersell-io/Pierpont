@@ -270,28 +270,62 @@
 
   <main class="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 relative z-10">
 
-    <!-- Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-      <div class="glass-card p-5">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Total Permits</div>
-        <div class="stat-value mt-2" id="statTotal">0</div>
+    <!-- #1 AREA: Quick Filters — Value + Date Range -->
+    <div class="flex flex-wrap items-center gap-3 mb-5">
+      <div class="flex items-center gap-2">
+        <select id="filterValuation" class="glass-input" style="font-weight:600;font-size:.85rem;padding:10px 36px 10px 14px" onchange="applyValuationFilter()">
+          <option value="">All Values</option>
+          <option value="200000+" selected>$200K+</option>
+          <option value="300000+">$300K+</option>
+          <option value="500000+">$500K+</option>
+          <option value="under200000">Under $200K</option>
+          <option value="none">No Value Listed</option>
+        </select>
+        <input type="hidden" id="filterMinValue">
+        <input type="hidden" id="filterMaxValue">
       </div>
-      <div class="glass-card p-5">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Avg Value</div>
-        <div class="stat-value mt-2" id="statAvgValue">$0</div>
+      <div class="flex items-center gap-2">
+        <input type="date" id="filterDateFrom" class="glass-input" style="font-size:.8rem;padding:9px 12px" onchange="updateFilters()">
+        <span style="color:var(--text-dim);font-size:.8rem">to</span>
+        <input type="date" id="filterDateTo" class="glass-input" style="font-size:.8rem;padding:9px 12px" onchange="updateFilters()">
       </div>
-      <div class="glass-card p-5">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">$200K+ Projects</div>
-        <div class="stat-value highlight mt-2" id="statHighValue">0</div>
-      </div>
-      <div class="glass-card p-5">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim)">Date Range</div>
-        <div class="text-sm font-bold mt-2" style="font-family:'Fira Code',monospace;color:var(--text)" id="statDateRange">&mdash;</div>
+      <div class="flex-1"></div>
+      <div class="flex items-center gap-3" style="font-family:'Fira Code',monospace;font-size:.8rem">
+        <div style="color:var(--text-dim)">Permits: <span id="statTotal" style="color:var(--text);font-weight:600">0</span></div>
+        <div style="color:var(--text-dim)">Avg: <span id="statAvgValue" style="color:var(--text);font-weight:600">$0</span></div>
+        <div style="color:var(--text-dim)">$200K+: <span id="statHighValue" style="color:var(--blue);font-weight:700">0</span></div>
+        <span id="statDateRange" style="color:var(--text-dim);font-size:.7rem"></span>
       </div>
     </div>
 
+    <!-- #2 AREA: Search & Sort Filters -->
+    <div id="filterChips" class="hidden flex flex-wrap gap-2 mb-3"></div>
+    <div class="glass-card p-4 mb-5">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-48">
+          <input type="text" id="filterSearch" placeholder="Search address, builder, phone, email, permit #..." class="glass-input w-full" oninput="debouncedUpdate()">
+        </div>
+        <select id="filterDistance" class="glass-input" onchange="updateFilters()">
+          <option value="">All distances</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+          <option value="75">75 min</option>
+          <option value="90">90 min</option>
+        </select>
+        <select id="filterMunicipality" class="glass-input" onchange="updateFilters()"><option value="">All municipalities</option></select>
+        <select id="filterStatus" class="glass-input" onchange="updateFilters()"><option value="">All statuses</option></select>
+        <button onclick="resetFilters()" class="btn-glass" style="padding:8px 14px;font-size:.8rem">Reset</button>
+        <button onclick="exportCSV()" class="btn-glass flex items-center gap-1.5" style="padding:8px 14px;font-size:.8rem"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV</button>
+        <button id="btnDeleteSelected" onclick="deleteSelected()" class="btn-danger hidden flex items-center gap-1.5" style="font-size:.8rem"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg><span id="deleteCount">Delete</span></button>
+        <button id="btnClear" onclick="handleClearClick()" class="btn-danger" style="font-size:.8rem">Clear All</button>
+      </div>
+    </div>
+
+    <!-- #3 AREA: Permits Table (today's highlighted) -->
     <!-- New Permits Notification Panel -->
-    <div id="notificationPanel" class="glass-card p-5 mb-6 hidden" style="border-left:3px solid var(--blue)">
+    <div id="notificationPanel" class="glass-card p-5 mb-5 hidden" style="border-left:3px solid var(--blue)">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-semibold" style="color:var(--blue-light)">New Permits Today</h3>
         <div class="flex gap-2">
@@ -302,68 +336,8 @@
       <div id="notificationList" style="max-height:300px;overflow-y:auto"></div>
     </div>
 
-    <!-- Active Filter Chips -->
-    <div id="filterChips" class="hidden flex flex-wrap gap-2 mb-3"></div>
-
-    <!-- Filter Panel -->
-    <div class="glass-card p-5 mb-6">
-      <div class="flex flex-wrap items-end gap-3 mb-3">
-        <div class="flex-1 min-w-64">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Search</label>
-          <input type="text" id="filterSearch" placeholder="Address, builder, phone, email, permit #..." class="glass-input w-full" oninput="debouncedUpdate()">
-        </div>
-        <div class="w-40">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Max Distance</label>
-          <select id="filterDistance" class="glass-input w-full" onchange="updateFilters()">
-            <option value="">All distances</option>
-            <option value="15">Within 15 min</option>
-            <option value="30">Within 30 min</option>
-            <option value="45">Within 45 min</option>
-            <option value="60">Within 60 min</option>
-            <option value="75">Within 75 min</option>
-            <option value="90">Within 90 min</option>
-          </select>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-end gap-3">
-        <div class="w-48">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Municipality</label>
-          <select id="filterMunicipality" class="glass-input w-full" onchange="updateFilters()"><option value="">All municipalities</option></select>
-        </div>
-        <div class="w-36">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Date From</label>
-          <input type="date" id="filterDateFrom" class="glass-input w-full" onchange="updateFilters()">
-        </div>
-        <div class="w-36">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Date To</label>
-          <input type="date" id="filterDateTo" class="glass-input w-full" onchange="updateFilters()">
-        </div>
-        <div class="w-44">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Valuation</label>
-          <select id="filterValuation" class="glass-input w-full" onchange="applyValuationFilter()">
-            <option value="">All</option>
-            <option value="200000+" selected>$200K+</option>
-            <option value="under200000">Under $200K</option>
-            <option value="none">No Value Listed</option>
-          </select>
-        </div>
-        <input type="hidden" id="filterMinValue">
-        <input type="hidden" id="filterMaxValue">
-        <div class="w-40">
-          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-dim)">Status</label>
-          <select id="filterStatus" class="glass-input w-full" onchange="updateFilters()"><option value="">All statuses</option></select>
-        </div>
-        <div class="flex gap-2">
-          <button onclick="resetFilters()" class="btn-glass">Reset</button>
-          <button onclick="exportCSV()" class="btn-glass flex items-center gap-1.5"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> CSV</button>
-          <button id="btnDeleteSelected" onclick="deleteSelected()" class="btn-danger hidden flex items-center gap-1.5" style="font-size:.8rem"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg> <span id="deleteCount">Delete Selected</span></button>
-          <button id="btnClear" onclick="handleClearClick()" class="btn-danger">Clear All</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- FOIA Panel -->
-    <div id="foiaPanel" class="glass-card p-5 mb-6 hidden">
+    <!-- FOIA Panel (#4 AREA) -->
+    <div id="foiaPanel" class="glass-card p-5 mb-5 hidden">
       <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="toggleFoiaPanel()">
         <h3 class="text-xs font-semibold uppercase tracking-wider" style="color:var(--text-dim)">FOIA Requests &mdash; Municipalities Without Public Portals</h3>
         <span id="foiaToggle" style="color:var(--text-dim)">&#x25BC;</span>
@@ -405,24 +379,19 @@
           <thead>
             <tr>
               <th style="width:30px;text-align:center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
-              <th class="sort-header" onclick="sortBy('address')">Address<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('municipality')">Municipality<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('builder_name')">Builder<span class="sort-arrow" id="sort-builder_name">&#x25B2;</span></th>
-              <th>Biz Phone</th>
-              <th>Biz Email</th>
-              <th>Personal Phone</th>
-              <th>Personal Email</th>
-              <th class="sort-header" onclick="sortBy('owner_name')">Owner<span class="sort-arrow" id="sort-owner_name">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('address')">Address / Builder<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('municipality')">Area<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
+              <th>Phone</th>
+              <th>Email</th>
               <th class="sort-header" style="text-align:right" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('inspection_date')">Insp Date<span class="sort-arrow" id="sort-inspection_date">&#x25B2;</span></th>
+              <th class="sort-header" onclick="sortBy('inspection_date')">Date<span class="sort-arrow active" id="sort-inspection_date">&#x25BC;</span></th>
               <th>Status</th>
-              <th class="sort-header" style="text-align:center" onclick="sortBy('opportunity_score')">Score<span class="sort-arrow active" id="sort-opportunity_score">&#x25BC;</span></th>
               <th style="text-align:center">Emailed</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="permitsTableBody">
-            <tr><td colspan="15" class="px-6 py-16 text-center" style="color:var(--text-dim)">
+            <tr><td colspan="10" class="px-6 py-16 text-center" style="color:var(--text-dim)">
               <svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
               <div class="text-base font-medium" style="color:var(--text)">No permits loaded</div>
               <div class="text-sm mt-1">Click <strong style="color:var(--blue)">Run Scraper</strong> to fetch permits.</div>
@@ -442,7 +411,7 @@
   </footer>
 
 <script>
-let currentSort = { column: 'opportunity_score', order: 'desc' };
+let currentSort = { column: 'inspection_date', order: 'desc' };
 let currentPage = 1;
 let scrapeCheckInterval = null;
 
@@ -469,6 +438,10 @@ function applyValuationFilter(){
   filters.no_value='';
   if(val==='200000+'){
     document.getElementById('filterMinValue').value='200000';
+  } else if(val==='300000+'){
+    document.getElementById('filterMinValue').value='300000';
+  } else if(val==='500000+'){
+    document.getElementById('filterMinValue').value='500000';
   } else if(val==='under200000'){
     document.getElementById('filterMaxValue').value='199999';
   } else if(val==='none'){
@@ -510,7 +483,7 @@ function renderChips() {
   c.classList.toggle('hidden',!has);
 }
 function clearFilter(k){const c=document.getElementById('filterChips');const ch=c.querySelector(`[data-key="${k}"]`);if(ch&&ch._clear)ch._clear();updateFilters();}
-function resetFilters(){document.getElementById('filterSearch').value='';document.getElementById('filterDistance').value='';document.getElementById('filterMunicipality').value='';document.getElementById('filterDateFrom').value='';document.getElementById('filterDateTo').value='';document.getElementById('filterMinValue').value='';document.getElementById('filterMaxValue').value='';document.getElementById('filterStatus').value='';document.getElementById('filterValuation').value='200000+';filters.no_value='';currentPage=1;currentSort={column:'opportunity_score',order:'desc'};applyValuationFilter();loadStats();}
+function resetFilters(){document.getElementById('filterSearch').value='';document.getElementById('filterDistance').value='';document.getElementById('filterMunicipality').value='';document.getElementById('filterDateFrom').value='';document.getElementById('filterDateTo').value='';document.getElementById('filterMinValue').value='';document.getElementById('filterMaxValue').value='';document.getElementById('filterStatus').value='';document.getElementById('filterValuation').value='200000+';filters.no_value='';currentPage=1;currentSort={column:'inspection_date',order:'desc'};applyValuationFilter();loadStats();}
 
 function buildQueryParams(){const p=new URLSearchParams();if(filters.search)p.set('search',filters.search);if(filters.max_drive_time)p.set('max_drive_time',filters.max_drive_time);if(filters.municipality)p.set('municipality',filters.municipality);if(filters.date_from)p.set('date_from',filters.date_from);if(filters.date_to)p.set('date_to',filters.date_to);if(filters.min_value)p.set('min_value',filters.min_value);if(filters.max_value)p.set('max_value',filters.max_value);if(filters.inspection_status)p.set('inspection_status',filters.inspection_status);if(filters.no_value)p.set('no_value',filters.no_value);return p;}
 
@@ -647,57 +620,62 @@ async function toggleEmailSent(id,cb){
 }
 
 // ── Table ────
+function isToday(dateStr){
+  if(!dateStr)return false;
+  const today=new Date().toISOString().split('T')[0];
+  return dateStr.startsWith(today);
+}
 function renderTable(permits){
   const tbody=document.getElementById('permitsTableBody');
   selectedPermits.clear();updateDeleteBtn();document.getElementById('selectAll').checked=false;
-  if(!permits||!permits.length){tbody.innerHTML=`<tr><td colspan="15" class="px-6 py-16 text-center" style="color:var(--text-dim)"><svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><path d="M20 12H4M12 4v16"/></svg><div class="text-base font-medium" style="color:var(--text)">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;return;}
+  if(!permits||!permits.length){tbody.innerHTML=`<tr><td colspan="10" class="px-6 py-16 text-center" style="color:var(--text-dim)"><svg class="mx-auto mb-3" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:rgba(43,108,176,0.3)"><path d="M20 12H4M12 4v16"/></svg><div class="text-base font-medium" style="color:var(--text)">No permits found</div><div class="text-sm mt-1">Try adjusting filters or run the scraper.</div></td></tr>`;return;}
   tbody.innerHTML='';
   permits.forEach(p=>{
     const isHV=p.project_value&&p.project_value>=200000;
+    const isTodayRow=isToday(p.scraped_at)||isToday(p.inspection_date);
     const tr=document.createElement('tr');
     tr.className=`cursor-pointer${isHV?' high-value':''}`;
+    if(isTodayRow)tr.style.background='rgba(43,108,176,0.08)';
     tr.onclick=(e)=>{if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.closest('button')||e.target.closest('a'))return;const d=document.getElementById(`d-${p.id}`);if(d)d.classList.toggle('open');};
 
-    let bd='';
-    if(p.builder_name&&p.builder_company)bd=`<div class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name)}</div><div style="font-size:.65rem;color:var(--text-dim)">${esc(p.builder_company)}</div>`;
-    else if(p.builder_name||p.builder_company)bd=`<span class="font-medium" style="color:var(--text-bright)">${esc(p.builder_name||p.builder_company)}</span>`;
-    else bd='<span class="empty-cell">&mdash;</span>';
-
+    // Builder name under address
+    const builderLabel=esc(p.builder_company||p.builder_name||'');
+    const contactName=esc(p.builder_name&&p.builder_company?p.builder_name:'');
     const emailSentChecked=p.email_sent?'checked':'';
+    const bestPhone=p.builder_phone||p.personal_phone||p.applicant_phone;
+    const bestEmail=p.builder_email||p.personal_email||p.applicant_email;
 
     tr.innerHTML=`
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="permit-checkbox" data-id="${p.id}" onchange="togglePermitSelect(this)"></td>
-      <td class="font-medium" style="color:var(--text-bright);max-width:200px" title="${esc(p.address)}"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div></td>
+      <td style="max-width:260px" title="${esc(p.address)}">
+        <div class="font-medium" style="color:var(--text-bright);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div>
+        <div style="font-size:.7rem;color:var(--blue-light);font-weight:500;margin-top:1px">${builderLabel}${contactName?` <span style="color:var(--text-dim);font-weight:400">(${contactName})</span>`:''}</div>
+      </td>
       <td style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td>${bd}</td>
-      <td id="phone-${p.id}">${phone(p.builder_phone)}</td>
-      <td id="email-${p.id}">${email(p.builder_email)}</td>
-      <td id="pphone-${p.id}" style="color:var(--text-dim)">${phone(p.personal_phone)}</td>
-      <td id="pemail-${p.id}" style="color:var(--text-dim)">${email(p.personal_email)}</td>
-      <td style="color:var(--text)">${esc(p.owner_name)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td id="phone-${p.id}">${phone(bestPhone)}</td>
+      <td id="email-${p.id}">${email(bestEmail)}</td>
       <td style="text-align:right;font-family:'Fira Code',monospace;font-size:.75rem;${isHV?'color:var(--blue)':''}">${p.project_value?fmtCurrency(p.project_value):'<span class="empty-cell">&mdash;</span>'}</td>
       <td style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td>${statusBadge(p.inspection_status)}</td>
-      <td style="text-align:center">${scoreBadge(p.opportunity_score)}</td>
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)" title="Mark as emailed" style="cursor:pointer"></td>
       <td onclick="event.stopPropagation()" style="white-space:nowrap"><a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:3px 8px;font-size:.65rem;border-radius:6px;display:inline-flex;align-items:center;gap:3px" title="Send drywall bid email"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a></td>`;
     tbody.appendChild(tr);
 
-    // Expandable detail
+    // Expandable detail row
     let subsHtml='&mdash;',linkedPermitHtml='&mdash;',dataSourceHtml='';
     try{const raw=typeof p.raw_data==='string'?JSON.parse(p.raw_data):p.raw_data;const subs=raw?._contractors||[];if(subs.length)subsHtml=subs.map(c=>esc(c.name)+(c.company?` <span style="color:var(--text-dim)">(${esc(c.company)})</span>`:'')).join(', ');const allC=raw?._allContacts||[];if(allC.length)subsHtml=allC.map(c=>`<span class="font-medium">${esc(c.name||'?')}</span> <span style="color:var(--text-dim)">[${esc(c.type)}]</span>${c.company?' @ '+esc(c.company):''}`).join('<br>');if(raw?._linkedPermit){const lpUrl=raw._linkedPermitUrl;linkedPermitHtml=lpUrl?`<a href="${esc(lpUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(raw._linkedPermit)}</a>`:esc(raw._linkedPermit);}if(raw?._dataSource){const src=raw._dataSource==='building_permit'?'Building Permit':'Inspection Contacts';dataSourceHtml=`<span class="badge ${raw._dataSource==='building_permit'?'badge-green':'badge-blue'}">${src}</span>`;}}catch(e){}
 
     const dr=document.createElement('tr');dr.id=`d-${p.id}`;dr.className='detail-row';
-    dr.innerHTML=`<td colspan="15" style="padding:16px 24px;background:rgba(43,108,176,0.03)"><div class="grid grid-cols-2 md:grid-cols-4 gap-4" style="font-size:.8rem">
+    dr.innerHTML=`<td colspan="10" style="padding:16px 24px;background:rgba(43,108,176,0.03)"><div class="grid grid-cols-2 md:grid-cols-4 gap-4" style="font-size:.8rem">
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Permit #</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.75rem">${esc(p.permit_number)||'&mdash;'}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Linked Building Permit</span><span class="font-medium">${linkedPermitHtml}</span></div>
-      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Opportunity Score</span><span class="font-medium">${scoreBadge(p.opportunity_score)} ${dataSourceHtml}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Inspection Type</span><span class="font-medium">${esc(p.inspection_type)||'&mdash;'}</span></div>
-      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Builder</span><span class="font-medium">${esc(p.builder_name)||esc(p.applicant_name)||'&mdash;'}${p.builder_company?' @ '+esc(p.builder_company):''}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Owner</span><span class="font-medium">${esc(p.owner_name)||'&mdash;'}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Builder</span><span class="font-medium">${esc(p.builder_name)||esc(p.applicant_name)||'&mdash;'}${p.builder_company?' @ '+esc(p.builder_company):''}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Biz Phone</span><span class="font-medium">${phone(p.builder_phone)}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Biz Email</span><span class="font-medium">${email(p.builder_email)}</span></div>
+      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Personal</span><span class="font-medium">${phone(p.personal_phone)} ${email(p.personal_email)}</span></div>
       <div class="md:col-span-2"><span style="color:var(--text-dim);font-size:.65rem;display:block">All Contacts</span><span class="font-medium" style="font-size:.75rem;line-height:1.6">${subsHtml}</span></div>
-      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Issue Date</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.75rem">${fmtDateShort(p.permit_issue_date)||'&mdash;'}</span></div>
-      <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Scraped</span><span class="font-medium" style="font-family:'Fira Code',monospace;font-size:.7rem">${p.scraped_at?new Date(p.scraped_at+'Z').toLocaleString():'&mdash;'}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Website</span><span class="font-medium" id="website-${p.id}">${p.builder_website?`<a href="${esc(p.builder_website)}" target="_blank" onclick="event.stopPropagation()">${esc((()=>{try{return new URL(p.builder_website).hostname.replace(/^www\\./, '');}catch{return p.builder_website;}})())}</a>`:'&mdash;'}</span></div>
       <div><span style="color:var(--text-dim);font-size:.65rem;display:block">Builder Lookup</span>${(p.builder_company||p.builder_name)?`<button onclick="event.stopPropagation();lookupBuilder(${p.id},this)" style="margin-top:4px;padding:4px 14px;font-size:.7rem;font-weight:600;border-radius:9999px;background:rgba(43,108,176,0.1);color:#93C5FD;border:1px solid rgba(249,115,22,0.2);cursor:pointer;transition:all 0.2s">Lookup Contact Info</button>`:'<span style="color:var(--text-dim);font-size:.7rem">No builder info</span>'}</div>
     </div></td>`;

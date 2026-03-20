@@ -266,7 +266,7 @@ module.exports = {
       citizenserveId: 288,
       active: true,
       driveTimeMinutes: 35,
-      foia: { type: 'email', email: 'pwiggins@townofseabrookisland.org' },
+      // foia removed — inspections included in Charleston reports
     },
     follyBeach: {
       name: 'City of Folly Beach',
