@@ -745,9 +745,11 @@ async function findCompanyWebsite(queries, page) {
 }
 
 /**
- * Scrape a website for contact info.
- * Strategy: Load homepage first and discover the real contact page from nav links.
- * Only tries 3-4 pages max instead of 13. Falls back to axios for speed.
+ * Scrape a website THOROUGHLY for contact info.
+ * Strategy: Crawl the entire site — discover all internal nav links from the
+ * homepage, then visit every page (up to 15) looking for phone/email.
+ * Priority order: contact/about pages first, then all other internal pages.
+ * Only stops early when we have BOTH phone AND email.
  */
 async function scrapeContactInfo(websiteUrl, page) {
   if (!websiteUrl) return { phones: [], emails: [] };
@@ -758,10 +760,13 @@ async function scrapeContactInfo(websiteUrl, page) {
   try { baseUrl = new URL(websiteUrl).origin; } catch { return { phones: [], emails: [] }; }
 
   const visited = new Set();
+  const MAX_PAGES = 15; // Don't crawl forever
 
-  // Helper: scrape a single page via axios (fast, no JS but works for most sites)
+  function hasFullContact() { return allPhones.size > 0 && allEmails.size > 0; }
+
+  // Helper: scrape a single page via axios and discover ALL internal links
   async function scrapePage(url) {
-    if (visited.has(url)) return;
+    if (visited.has(url)) return [];
     visited.add(url);
     try {
       const { data } = await axios.get(url, {
@@ -778,20 +783,27 @@ async function scrapeContactInfo(websiteUrl, page) {
       phones.forEach(p => allPhones.add(p));
       emails.forEach(e => allEmails.add(e));
 
-      // Return discovered contact page links
-      const contactLinks = [];
+      // Discover ALL internal links on this page (not just "contact" ones)
+      const discoveredLinks = new Set();
       $('a[href]').each((_, el) => {
         const href = $(el).attr('href') || '';
-        const text = ($(el).text() || '').toLowerCase();
-        if (text.includes('contact') || text.includes('get in touch') ||
-            text.includes('reach us') || href.toLowerCase().includes('/contact')) {
-          try {
-            const full = href.startsWith('http') ? href : new URL(href, baseUrl).href;
-            if (full.startsWith(baseUrl) && !visited.has(full)) contactLinks.push(full);
-          } catch {}
-        }
+        try {
+          const full = href.startsWith('http') ? href : new URL(href, baseUrl).href;
+          // Only follow internal links on the same domain
+          if (!full.startsWith(baseUrl)) return;
+          // Skip anchors, files, and query-heavy URLs
+          const pathname = new URL(full).pathname.toLowerCase();
+          if (pathname.match(/\.(pdf|jpg|jpeg|png|gif|svg|css|js|zip|doc|xlsx?)$/)) return;
+          if (full.includes('#') && full.split('#')[0] === url) return;
+          // Normalize: strip trailing slash, strip query params for dedup
+          const normalized = full.split('?')[0].split('#')[0].replace(/\/$/, '') || baseUrl;
+          if (!visited.has(normalized) && !visited.has(normalized + '/')) {
+            discoveredLinks.add(normalized);
+          }
+        } catch {}
       });
-      return contactLinks;
+
+      return [...discoveredLinks];
     } catch { return []; }
   }
 
@@ -814,35 +826,88 @@ async function scrapeContactInfo(websiteUrl, page) {
     } catch {}
   }
 
-  // ── Phase 1: Fast axios scrape of homepage ──
-  const contactLinks = await scrapePage(websiteUrl) || [];
-  if (allPhones.size > 0 && allEmails.size > 0) {
+  // Prioritize pages likely to have contact info
+  function prioritizeLinks(links) {
+    const high = []; // contact, about, team, staff
+    const medium = []; // services, projects, areas
+    const low = []; // everything else
+
+    const highPatterns = /\/(contact|about|team|staff|people|who-we-are|meet|our-team|reach|connect|get-in-touch)/i;
+    const mediumPatterns = /\/(service|project|portfolio|work|area|testimonial|review|bid|estimate|quote)/i;
+    const skipPatterns = /\/(blog|news|post|article|tag|category|archive|feed|cart|shop|store|login|signup|register|privacy|terms|cookie|sitemap|wp-admin|wp-content)/i;
+
+    for (const link of links) {
+      const path = new URL(link).pathname.toLowerCase();
+      if (skipPatterns.test(path)) continue;
+      if (highPatterns.test(path)) high.push(link);
+      else if (mediumPatterns.test(path)) medium.push(link);
+      else low.push(link);
+    }
+
+    return [...high, ...medium, ...low];
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Phase 1: Scrape homepage — discover all internal links
+  // ══════════════════════════════════════════════════════════════════════════
+  const discoveredLinks = await scrapePage(websiteUrl) || [];
+  utils.log(`[WebScrape] ${websiteUrl}: homepage scraped, ${discoveredLinks.length} internal links found, ${allPhones.size} phone(s), ${allEmails.size} email(s)`);
+
+  if (hasFullContact()) {
     return { phones: [...allPhones], emails: [...allEmails] };
   }
 
-  // ── Phase 2: Follow discovered contact links (max 2) ──
-  for (const link of contactLinks.slice(0, 2)) {
-    await scrapePage(link);
-    if (allPhones.size > 0 && allEmails.size > 0) {
-      return { phones: [...allPhones], emails: [...allEmails] };
+  // ══════════════════════════════════════════════════════════════════════════
+  // Phase 2: Also add common paths in case homepage nav didn't link them
+  // ══════════════════════════════════════════════════════════════════════════
+  const commonPaths = ['/contact', '/contact-us', '/about', '/about-us', '/team',
+    '/our-team', '/staff', '/get-a-quote', '/services', '/about/team'];
+  for (const p of commonPaths) {
+    const url = baseUrl + p;
+    if (!visited.has(url) && !visited.has(url + '/')) {
+      discoveredLinks.push(url);
     }
   }
 
-  // ── Phase 3: Try common contact paths if nothing discovered ──
-  if (contactLinks.length === 0) {
-    for (const path of ['/contact', '/contact-us', '/about']) {
-      const url = `${baseUrl}${path}`;
-      await scrapePage(url);
-      if (allPhones.size > 0 || allEmails.size > 0) break;
+  // ══════════════════════════════════════════════════════════════════════════
+  // Phase 3: Crawl all discovered pages in priority order
+  // Contact/about pages first, then services, then everything else
+  // ══════════════════════════════════════════════════════════════════════════
+  const prioritized = prioritizeLinks(discoveredLinks);
+  let pagesScraped = 1; // homepage already done
+
+  for (const link of prioritized) {
+    if (pagesScraped >= MAX_PAGES) break;
+    if (hasFullContact()) break;
+
+    const newLinks = await scrapePage(link);
+    pagesScraped++;
+
+    // If we're still missing email and found new internal links, add them to queue
+    // (but only for high-priority pages to avoid infinite expansion)
+    if (!hasFullContact() && pagesScraped < 5) {
+      for (const nl of newLinks.slice(0, 3)) {
+        if (!prioritized.includes(nl)) prioritized.push(nl);
+      }
     }
   }
 
-  // ── Phase 4: If still nothing, try Puppeteer on homepage (JS-rendered) ──
+  utils.log(`[WebScrape] ${websiteUrl}: crawled ${pagesScraped} pages total, ${allPhones.size} phone(s), ${allEmails.size} email(s)`);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Phase 4: If STILL nothing, try Puppeteer (JS-rendered sites like React/Vue)
+  // Re-visit the key pages with a real browser
+  // ══════════════════════════════════════════════════════════════════════════
   if (allPhones.size === 0 && allEmails.size === 0 && page) {
-    visited.clear(); // Allow re-visiting with Puppeteer
+    utils.log(`[WebScrape] ${websiteUrl}: no contacts found via axios, trying Puppeteer...`);
+    visited.clear();
     await scrapePagePuppeteer(websiteUrl);
-    if (allPhones.size === 0 && allEmails.size === 0) {
-      await scrapePagePuppeteer(`${baseUrl}/contact`);
+
+    if (!hasFullContact()) {
+      for (const p of ['/contact', '/contact-us', '/about', '/about-us', '/team']) {
+        if (hasFullContact()) break;
+        await scrapePagePuppeteer(baseUrl + p);
+      }
     }
   }
 
