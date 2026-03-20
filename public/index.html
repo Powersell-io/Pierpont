@@ -546,7 +546,8 @@ function cleanAddress(addr){
   return addr.replace(/\s{2,}/g,' ').trim();
 }
 function buildMailtoUrl(permit){
-  const builderName=permit.builder_name||permit.builder_company||'Builder';
+  const fullName=permit.builder_name||permit.builder_company||'Builder';
+  const builderName=fullName.split(/\s+/)[0];
   const address=cleanAddress(permit.address);
   const subject=encodeURIComponent(`Drywall Bid – ${address}`);
   const body=encodeURIComponent(`Hey ${builderName},
