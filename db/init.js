@@ -222,7 +222,10 @@ async function upsertPermit(permit) {
   const existing = queryOne('SELECT id FROM permits WHERE permit_number = ?', [p.permit_number]);
 
   if (existing) {
-    execute(`UPDATE permits SET address=?,municipality=?,builder_name=?,builder_company=?,builder_phone=?,builder_email=?,builder_website=?,applicant_name=?,applicant_phone=?,applicant_email=?,owner_name=?,project_value=?,permit_type=?,inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=?,source_url=?,scraped_at=datetime('now'),raw_data=?,opportunity_score=? WHERE permit_number=?`,
+    // CRITICAL: Never overwrite existing contact info with nulls from a re-scrape.
+    // The scrapers don't return phone/email — those come from the builder lookup.
+    // Use COALESCE to keep the existing value if the new value is null.
+    execute(`UPDATE permits SET address=?,municipality=?,builder_name=COALESCE(?,builder_name),builder_company=COALESCE(?,builder_company),builder_phone=COALESCE(?,builder_phone),builder_email=COALESCE(?,builder_email),builder_website=COALESCE(?,builder_website),applicant_name=COALESCE(?,applicant_name),applicant_phone=COALESCE(?,applicant_phone),applicant_email=COALESCE(?,applicant_email),owner_name=COALESCE(?,owner_name),project_value=COALESCE(?,project_value),permit_type=COALESCE(?,permit_type),inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=COALESCE(?,permit_issue_date),source_url=COALESCE(?,source_url),scraped_at=datetime('now'),raw_data=?,opportunity_score=? WHERE permit_number=?`,
       [p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.permit_number]);
     return { action: 'updated', id: existing.id };
   } else {
@@ -451,6 +454,38 @@ async function backfillBuilderCache() {
   console.log(`[BuilderCache] Backfill complete: ${added} new entries added (${stats.total} total, ${stats.withPhone} with phone, ${stats.withEmail} with email)`);
 }
 
+// ─── Restore nuked contact data from builder cache ──────────────────────────
+async function restoreContactsFromCache() {
+  await getDb();
+  // Find permits missing phone/email where we have cached data for their builder
+  const rows = queryAll(`SELECT id, builder_name, builder_company, builder_phone, builder_email, builder_website
+    FROM permits
+    WHERE (builder_company IS NOT NULL AND builder_company != '' OR builder_name IS NOT NULL AND builder_name != '')
+      AND (builder_phone IS NULL OR builder_phone = '')
+      AND (builder_email IS NULL OR builder_email = '')`);
+
+  let restored = 0;
+  for (const row of rows) {
+    const company = row.builder_company || row.builder_name;
+    if (!company) continue;
+    const cached = builderCache.get(company);
+    if (!cached || (!cached.phone && !cached.email)) continue;
+
+    const updates = [];
+    const vals = [];
+    if (cached.phone && !row.builder_phone) { updates.push('builder_phone = ?'); vals.push(cached.phone); }
+    if (cached.email && !row.builder_email) { updates.push('builder_email = ?'); vals.push(cached.email); }
+    if (cached.website && !row.builder_website) { updates.push('builder_website = ?'); vals.push(cached.website); }
+
+    if (updates.length > 0) {
+      vals.push(row.id);
+      execute(`UPDATE permits SET ${updates.join(', ')} WHERE id = ?`, vals);
+      restored++;
+    }
+  }
+  if (restored > 0) console.log(`[DB] Restored contact info for ${restored} permits from builder cache`);
+}
+
 // ─── Scrape runs ─────────────────────────────────────────────────────────────
 async function createScrapeRun() { await getDb(); execute('INSERT INTO scrape_runs (status) VALUES (?)', ['running']); const r=queryOne('SELECT last_insert_rowid() as id'); return r.id; }
 async function updateScrapeRun(id, data) { await getDb(); const f=[]; const v=[]; for (const [k,val] of Object.entries(data)) { f.push(`${k}=?`); v.push(val===undefined?null:val); } v.push(id); if(f.length) execute(`UPDATE scrape_runs SET ${f.join(',')} WHERE id=?`, v); }
@@ -529,4 +564,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, getTodaysNewPermits, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, getTodaysNewPermits, clearAllData, close };

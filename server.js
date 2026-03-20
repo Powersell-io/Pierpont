@@ -503,6 +503,7 @@ async function start() {
   await db.getDb();
   await db.backfillOpportunityScores();
   await db.backfillBuilderCache();
+  await db.restoreContactsFromCache();
   app.listen(config.server.port, () => {
     console.log('');
     console.log('🏗️  Pierpont Money Printer');
