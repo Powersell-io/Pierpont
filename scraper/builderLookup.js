@@ -841,6 +841,9 @@ async function scrapeContactInfo(websiteUrl, page) {
       phones.forEach(p => allPhones.add(p));
       emails.forEach(e => allEmails.add(e));
 
+      // Scan raw HTML for social links (catches icon links, data attributes, etc.)
+      scanHtmlForSocialLinks(data);
+
       // Discover ALL links on this page
       const discoveredLinks = new Set();
       $('a[href]').each((_, el) => {
@@ -882,7 +885,7 @@ async function scrapeContactInfo(websiteUrl, page) {
     } catch { return []; }
   }
 
-  // Helper: scrape via Puppeteer (for JS-rendered sites)
+  // Helper: scrape via Puppeteer (for JS-rendered sites) — also discovers social links
   async function scrapePagePuppeteer(url) {
     if (visited.has(url)) return;
     visited.add(url);
@@ -898,7 +901,47 @@ async function scrapeContactInfo(websiteUrl, page) {
       const { phones, emails } = extractContactFromHtml(html, $);
       phones.forEach(p => allPhones.add(p));
       emails.forEach(e => allEmails.add(e));
+
+      // Discover social links from Puppeteer-rendered pages (icons in header/footer)
+      $('a[href]').each((_, el) => {
+        const href = $(el).attr('href') || '';
+        try {
+          if (!href.startsWith('http')) return;
+          const hostname = new URL(href).hostname.toLowerCase();
+          if (hostname.includes('facebook.com') && !href.includes('/sharer') && !href.includes('/share')
+              && !href.includes('/login') && !href.includes('facebook.com/tr')) {
+            if (!socialLinks.some(l => l.url === href)) socialLinks.push({ url: href, type: 'facebook' });
+          }
+          if (hostname.includes('linkedin.com') && !href.includes('/share')) {
+            if (!socialLinks.some(l => l.url === href)) socialLinks.push({ url: href, type: 'linkedin' });
+          }
+          if (hostname.includes('instagram.com')) {
+            if (!socialLinks.some(l => l.url === href)) socialLinks.push({ url: href, type: 'instagram' });
+          }
+        } catch {}
+      });
     } catch {}
+  }
+
+  // Helper: scan raw HTML for social links (catches href patterns outside <a> tags)
+  function scanHtmlForSocialLinks(html) {
+    const fbMatches = html.match(/href=["'](https?:\/\/(?:www\.)?facebook\.com\/[^"'#?]+)/gi) || [];
+    for (const m of fbMatches) {
+      const url = m.replace(/^href=["']/i, '');
+      if (url.includes('/sharer') || url.includes('/share') || url.includes('/tr') || url.includes('/login')) continue;
+      if (!socialLinks.some(l => l.url === url)) socialLinks.push({ url, type: 'facebook' });
+    }
+    const liMatches = html.match(/href=["'](https?:\/\/(?:www\.)?linkedin\.com\/[^"'#?]+)/gi) || [];
+    for (const m of liMatches) {
+      const url = m.replace(/^href=["']/i, '');
+      if (url.includes('/share')) continue;
+      if (!socialLinks.some(l => l.url === url)) socialLinks.push({ url, type: 'linkedin' });
+    }
+    const igMatches = html.match(/href=["'](https?:\/\/(?:www\.)?instagram\.com\/[^"'#?]+)/gi) || [];
+    for (const m of igMatches) {
+      const url = m.replace(/^href=["']/i, '');
+      if (!socialLinks.some(l => l.url === url)) socialLinks.push({ url, type: 'instagram' });
+    }
   }
 
   // Prioritize pages likely to have contact info
