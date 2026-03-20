@@ -541,11 +541,15 @@ async function deleteSelected(){
 }
 
 // ── Email template (mailto:) ────
+function cleanAddress(addr){
+  if(!addr)return '[Address]';
+  return addr.replace(/\s{2,}/g,' ').trim();
+}
 function buildMailtoUrl(permit){
   const builderName=permit.builder_name||permit.builder_company||'Builder';
-  const address=permit.address||'[Address]';
+  const address=cleanAddress(permit.address);
   const subject=encodeURIComponent(`Drywall Bid – ${address}`);
-  const body=encodeURIComponent(`Hello ${builderName},
+  const body=encodeURIComponent(`Hey ${builderName},
 
 We noticed an upcoming project at ${address} and wanted to reach out to see if you are currently accepting bids for the drywall scope.
 
