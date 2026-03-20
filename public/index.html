@@ -211,6 +211,12 @@
     @media (max-width: 768px) {
       .logo-text { font-size: 1.2rem; }
       .stat-value { font-size: 1.3rem; }
+      .mobile-hide { display: none !important; }
+      .data-table { font-size: .7rem; }
+      .data-table thead th { padding: 8px 6px; font-size: .55rem; }
+      .data-table tbody td { padding: 8px 6px; }
+      .layout-wrap { flex-direction: column !important; }
+      .mobile-tabs { display: flex !important; }
     }
   </style>
 </head>
@@ -239,15 +245,15 @@
             <span id="lookupIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
             <span id="lookupText">Lookup Builders</span>
           </button>
-          <button id="btnSchedule" onclick="toggleSchedule()" class="btn-glass flex items-center gap-2" title="Auto-scrape at 7am & 7pm EST (today only)">
+          <button id="btnSchedule" onclick="toggleSchedule()" class="btn-glass flex items-center gap-2 mobile-hide" title="Auto-scrape at 7am & 7pm EST (today only)">
             <span id="scheduleIcon"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
             <span id="scheduleText">Auto: ON</span>
           </button>
-          <button id="btnSender" onclick="cycleSender()" class="btn-glass flex items-center gap-2" title="Who is sending emails">
+          <button id="btnSender" onclick="cycleSender()" class="btn-glass flex items-center gap-2 mobile-hide" title="Who is sending emails">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
             <span id="senderText">Steven</span>
           </button>
-          <button id="btnSig" onclick="toggleSig()" class="btn-glass flex items-center gap-2" title="Include signature in email template">
+          <button id="btnSig" onclick="toggleSig()" class="btn-glass flex items-center gap-2 mobile-hide" title="Include signature in email template">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
             <span id="sigText">Sig: ON</span>
           </button>
@@ -268,8 +274,17 @@
     </div>
   </div>
 
-  <div class="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 relative z-10" style="display:flex;gap:0">
-    <!-- Left Sidebar Nav -->
+  <!-- Mobile tab bar (above everything on small screens) -->
+  <div class="sm:hidden max-w-screen-2xl mx-auto px-4 pt-4 sm:px-6 relative z-10">
+    <div class="flex gap-2 mb-0">
+      <button onclick="showView('permits')" id="mob-permits" class="btn-primary flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">Inspections</button>
+      <button onclick="showView('newpermits')" id="mob-newpermits" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">New Permits</button>
+      <button onclick="showView('foia')" id="mob-foia" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">FOIA</button>
+    </div>
+  </div>
+
+  <div class="max-w-screen-2xl mx-auto px-4 py-4 sm:py-6 sm:px-6 relative z-10 layout-wrap" style="display:flex;gap:0">
+    <!-- Left Sidebar Nav (desktop only) -->
     <nav style="width:180px;min-width:180px;padding-right:20px;border-right:1px solid rgba(255,255,255,0.06)" class="hidden sm:block">
       <div style="position:sticky;top:90px">
         <button onclick="showView('permits')" id="nav-permits" class="nav-tab active" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:600;color:var(--text-bright);background:rgba(43,108,176,0.15);border:1px solid rgba(43,108,176,0.2);margin-bottom:6px;cursor:pointer;transition:all .2s">Inspections</button>
@@ -277,13 +292,6 @@
         <button onclick="showView('foia')" id="nav-foia" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">FOIA Requests</button>
       </div>
     </nav>
-
-    <!-- Mobile tab bar (shown on small screens) -->
-    <div class="sm:hidden flex gap-2 mb-4 w-full">
-      <button onclick="showView('permits')" id="mob-permits" class="btn-primary flex-1" style="font-size:.8rem;padding:8px">Inspections</button>
-      <button onclick="showView('newpermits')" id="mob-newpermits" class="btn-glass flex-1" style="font-size:.8rem;padding:8px">New Permits</button>
-      <button onclick="showView('foia')" id="mob-foia" class="btn-glass flex-1" style="font-size:.8rem;padding:8px">FOIA</button>
-    </div>
 
   <main class="flex-1 min-w-0">
 
@@ -351,15 +359,15 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width:30px;text-align:center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
+              <th style="width:30px;text-align:center" class="mobile-hide"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
               <th class="sort-header" onclick="sortBy('address')">Address / Builder<span class="sort-arrow" id="sort-address">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('municipality')">Area<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
+              <th class="sort-header mobile-hide" onclick="sortBy('municipality')">Area<span class="sort-arrow" id="sort-municipality">&#x25B2;</span></th>
               <th>Phone</th>
-              <th>Email</th>
+              <th class="mobile-hide">Email</th>
               <th class="sort-header" style="text-align:right" onclick="sortBy('project_value')">Value<span class="sort-arrow" id="sort-project_value">&#x25B2;</span></th>
-              <th class="sort-header" onclick="sortBy('inspection_date')">Date<span class="sort-arrow active" id="sort-inspection_date">&#x25BC;</span></th>
-              <th>Status</th>
-              <th style="text-align:center">Emailed</th>
+              <th class="sort-header mobile-hide" onclick="sortBy('inspection_date')">Date<span class="sort-arrow active" id="sort-inspection_date">&#x25BC;</span></th>
+              <th class="mobile-hide">Status</th>
+              <th style="text-align:center" class="mobile-hide">Emailed</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -687,18 +695,18 @@ function renderTable(permits){
     const bestEmail=p.builder_email||p.personal_email||p.applicant_email;
 
     tr.innerHTML=`
-      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="permit-checkbox" data-id="${p.id}" onchange="togglePermitSelect(this)"></td>
+      <td style="text-align:center" class="mobile-hide" onclick="event.stopPropagation()"><input type="checkbox" class="permit-checkbox" data-id="${p.id}" onchange="togglePermitSelect(this)"></td>
       <td style="max-width:260px" title="${esc(p.address)}">
         <div class="font-medium" style="color:var(--text-bright);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'<span class="empty-cell">&mdash;</span>'}</div>
         <div style="font-size:.7rem;color:#FDE047;font-weight:500;margin-top:1px">${builderLabel}${contactName?` <span style="color:var(--text-dim);font-weight:400">(${contactName})</span>`:''}</div>
       </td>
-      <td style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td class="mobile-hide" style="color:var(--text-dim);font-size:.7rem">${esc(p.municipality)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td id="phone-${p.id}">${phone(bestPhone)}</td>
-      <td id="email-${p.id}">${email(bestEmail)}</td>
+      <td class="mobile-hide" id="email-${p.id}">${email(bestEmail)}</td>
       <td style="text-align:right;font-family:'Fira Code',monospace;font-size:.75rem;${isHV?'color:var(--blue)':''}">${p.project_value?fmtCurrency(p.project_value):'<span class="empty-cell">&mdash;</span>'}</td>
-      <td style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
-      <td>${statusBadge(p.inspection_status)}</td>
-      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)" title="Mark as emailed" style="cursor:pointer"></td>
+      <td class="mobile-hide" style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
+      <td class="mobile-hide">${statusBadge(p.inspection_status)}</td>
+      <td class="mobile-hide" style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)" title="Mark as emailed" style="cursor:pointer"></td>
       <td onclick="event.stopPropagation()" style="white-space:nowrap"><a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:3px 8px;font-size:.65rem;border-radius:6px;display:inline-flex;align-items:center;gap:3px" title="Send drywall bid email"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a></td>`;
     tbody.appendChild(tr);
 
