@@ -543,7 +543,8 @@ async function deleteSelected(){
 // ── Email template (mailto:) ────
 function cleanAddress(addr){
   if(!addr)return '[Address]';
-  return addr.replace(/\s{2,}/g,' ').trim();
+  return addr.replace(/\s{2,}/g,' ').trim()
+    .split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
 }
 function buildMailtoUrl(permit){
   const fullName=permit.builder_name||permit.builder_company||'Builder';
