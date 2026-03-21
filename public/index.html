@@ -681,11 +681,18 @@ Best regards,${sig}`);
   return `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
 }
 
-async function toggleEmailSent(id,cb){
-  const sent=cb.checked;
+async function toggleEmailSent(id,sent){
   try{
     await fetch(`/api/permits/${id}/email-sent`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sent})});
-  }catch(e){cb.checked=!sent;}
+  }catch(e){}
+}
+function markEmailSentOnClick(permitId,el){
+  // Mark as sent after a short delay (let the mailto: open first)
+  setTimeout(()=>{
+    toggleEmailSent(permitId,true);
+    // Replace button with checkmark in the UI
+    el.parentElement.innerHTML='<span style="color:#4ADE80;font-size:.75rem" title="Email sent">&#x2713; Sent</span>';
+  },500);
 }
 
 // ── Table ────
@@ -726,8 +733,8 @@ function renderTable(permits){
       <td style="text-align:right;font-family:'Fira Code',monospace;font-size:.75rem;${isHV?'color:var(--blue)':''}">${p.project_value?fmtCurrency(p.project_value):'<span class="empty-cell">&mdash;</span>'}</td>
       <td class="mobile-hide" style="color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem">${fmtDateShort(p.inspection_date)||'<span class="empty-cell">&mdash;</span>'}</td>
       <td class="mobile-hide">${statusBadge(p.inspection_status)}</td>
-      <td class="mobile-hide" style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)" title="Mark as emailed" style="cursor:pointer"></td>
-      <td onclick="event.stopPropagation()" style="white-space:nowrap"><a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:3px 8px;font-size:.65rem;border-radius:6px;display:inline-flex;align-items:center;gap:3px" title="Send drywall bid email"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a></td>`;
+      <td class="mobile-hide" style="text-align:center" onclick="event.stopPropagation()">${p.email_sent?'<span style="color:#4ADE80;font-size:.9rem" title="Email sent">&#x2713;</span>':''}</td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">${p.email_sent?'<span style="color:#4ADE80;font-size:.75rem" title="Email sent">&#x2713; Sent</span>':(bestEmail?`<a href="${buildMailtoUrl(p)}" onclick="markEmailSentOnClick(${p.id},this)" class="btn-glass" style="padding:3px 8px;font-size:.65rem;border-radius:6px;display:inline-flex;align-items:center;gap:3px" title="Send drywall bid email"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a>`:'<span class="empty-cell" style="font-size:.65rem">&mdash;</span>')}</td>`;
     tbody.appendChild(tr);
 
     // Expandable detail row

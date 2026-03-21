@@ -116,6 +116,14 @@ function initSchema() {
       log TEXT
     )
   `);
+
+  // Track deleted permit numbers so they don't come back on re-scrape
+  db.run(`
+    CREATE TABLE IF NOT EXISTS deleted_permits (
+      permit_number TEXT PRIMARY KEY,
+      deleted_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
   saveToFile();
 }
 
@@ -187,6 +195,12 @@ async function upsertPermit(permit) {
   if (!p.permit_number) {
     // Generate a synthetic key from address + type + date
     p.permit_number = `AUTO-${(p.address || '').substring(0,30)}-${(p.inspection_type || '').substring(0,10)}-${p.inspection_date || Date.now()}`.replace(/\s+/g, '-');
+  }
+
+  // Skip if this permit was previously deleted by the user
+  const wasDeleted = queryOne('SELECT 1 FROM deleted_permits WHERE permit_number = ?', [p.permit_number]);
+  if (wasDeleted) {
+    return { action: 'skipped', reason: 'previously deleted' };
   }
 
   // Reject records that are clearly form labels, not real permit data
@@ -531,6 +545,11 @@ async function markPermitsEmailed(ids) {
 // ─── Delete individual permit ──────────────────────────────────────────────
 async function deletePermit(id) {
   await getDb();
+  // Record the permit number so it doesn't come back on re-scrape
+  const permit = queryOne('SELECT permit_number FROM permits WHERE id = ?', [id]);
+  if (permit?.permit_number) {
+    db.run('INSERT OR IGNORE INTO deleted_permits (permit_number) VALUES (?)', [permit.permit_number]);
+  }
   execute('DELETE FROM permits WHERE id = ?', [id]);
 }
 
@@ -538,7 +557,12 @@ async function deletePermit(id) {
 async function deletePermits(ids) {
   await getDb();
   if (!ids || ids.length === 0) return;
+  // Record all permit numbers so they don't come back on re-scrape
   const placeholders = ids.map(() => '?').join(',');
+  const permits = queryAll(`SELECT permit_number FROM permits WHERE id IN (${placeholders})`, ids);
+  for (const p of permits) {
+    if (p.permit_number) db.run('INSERT OR IGNORE INTO deleted_permits (permit_number) VALUES (?)', [p.permit_number]);
+  }
   execute(`DELETE FROM permits WHERE id IN (${placeholders})`, ids);
 }
 
