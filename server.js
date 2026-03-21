@@ -553,33 +553,50 @@ async function start() {
     if (process.env.EMAIL_FROM) console.log(`   From: ${process.env.EMAIL_FROM} → To: ${process.env.EMAIL_TO || process.env.EMAIL_FROM}`);
     console.log('');
 
-    // Smart auto-scrape: only run if last scrape was >6 hours ago
-    // Otherwise just serve existing data — it's already in the DB
+    // Smart auto-scrape: check DB state and only scrape what's needed
     setTimeout(async () => {
       try {
         const lastRun = await db.getLatestScrapeRun();
+        const stats = await db.getStats();
+        const hasData = stats.total_permits > 0;
         const hoursSinceLast = lastRun?.completed_at
           ? (Date.now() - new Date(lastRun.completed_at + 'Z').getTime()) / (1000 * 60 * 60)
           : 999;
 
-        if (hoursSinceLast < 6) {
-          console.log(`✅ Last scrape was ${Math.round(hoursSinceLast)}h ago — skipping auto-scrape, data is fresh`);
-          // Still run builder lookup for any permits missing contact info
+        if (hasData && hoursSinceLast < 6) {
+          // DB has data and it's fresh — just fill in any missing contacts
+          console.log(`✅ ${stats.total_permits} permits in DB, last scrape ${Math.round(hoursSinceLast)}h ago — skipping scrape`);
           runBuilderLookupAfterScrape();
           return;
         }
 
-        console.log(`🚀 Last scrape was ${Math.round(hoursSinceLast)}h ago — running auto-scrape...`);
-        if (!scrapeInProgress) {
-          scrapeInProgress = true;
-          const today = new Date().toISOString().split('T')[0];
-          scraper.runAllScrapers({ dateFrom: today, dateTo: today, days: 1 })
-            .then((result) => {
-              console.log(`🚀 Auto-scrape complete: ${result.permitsFound} permits (${result.permitsNew} new)`);
-              runBuilderLookupAfterScrape();
-            })
-            .catch((err) => console.error('Auto-scrape error:', err))
-            .finally(() => { scrapeInProgress = false; });
+        if (!hasData) {
+          // Empty DB (fresh deploy without volume) — full 30-day scrape
+          console.log('🚀 Empty database — running full 30-day scrape...');
+          if (!scrapeInProgress) {
+            scrapeInProgress = true;
+            scraper.runAllScrapers({ days: 30 })
+              .then((result) => {
+                console.log(`🚀 Full scrape complete: ${result.permitsFound} permits (${result.permitsNew} new)`);
+                runBuilderLookupAfterScrape();
+              })
+              .catch((err) => console.error('Auto-scrape error:', err))
+              .finally(() => { scrapeInProgress = false; });
+          }
+        } else {
+          // Has data but stale — just scrape today
+          console.log(`🚀 ${stats.total_permits} permits in DB, last scrape ${Math.round(hoursSinceLast)}h ago — scraping today...`);
+          if (!scrapeInProgress) {
+            scrapeInProgress = true;
+            const today = new Date().toISOString().split('T')[0];
+            scraper.runAllScrapers({ dateFrom: today, dateTo: today, days: 1 })
+              .then((result) => {
+                console.log(`🚀 Today scrape complete: ${result.permitsFound} permits (${result.permitsNew} new)`);
+                runBuilderLookupAfterScrape();
+              })
+              .catch((err) => console.error('Auto-scrape error:', err))
+              .finally(() => { scrapeInProgress = false; });
+          }
         }
       } catch (err) {
         console.error('Auto-scrape check error:', err);
