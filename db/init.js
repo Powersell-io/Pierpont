@@ -580,7 +580,7 @@ async function toggleEmailSent(id, sent) {
 async function getRecentNewPermits() {
   await getDb();
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  return queryAll(`SELECT * FROM permits WHERE date(scraped_at) >= ? AND email_sent = 0 ORDER BY inspection_date DESC, project_value DESC`, [threeDaysAgo]);
+  return queryAll(`SELECT * FROM permits WHERE date(scraped_at) >= ? AND email_sent = 0 AND (project_value >= 200000 OR project_value IS NULL OR project_value = 0) ORDER BY inspection_date DESC, project_value DESC`, [threeDaysAgo]);
 }
 
 // ─── Update job status ────────────────────────────────────────────────────
