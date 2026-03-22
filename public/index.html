@@ -274,11 +274,12 @@
     </div>
   </div>
 
-  <!-- Mobile tab bar (above everything on small screens) -->
+  <!-- Mobile tab bar -->
   <div class="sm:hidden max-w-screen-2xl mx-auto px-4 pt-4 sm:px-6 relative z-10">
     <div class="flex gap-2 mb-0">
-      <button onclick="showView('permits')" id="mob-permits" class="btn-primary flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">Inspections</button>
-      <button onclick="showView('newpermits')" id="mob-newpermits" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">New Permits</button>
+      <button onclick="showView('newpermits')" id="mob-newpermits" class="btn-primary flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">New</button>
+      <button onclick="showView('permits')" id="mob-permits" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">Inspections</button>
+      <button onclick="showView('opportunities')" id="mob-opportunities" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">Opps</button>
       <button onclick="showView('foia')" id="mob-foia" class="btn-glass flex-1" style="font-size:.75rem;padding:8px;border-radius:8px">FOIA</button>
     </div>
   </div>
@@ -287,9 +288,10 @@
     <!-- Left Sidebar Nav (desktop only) -->
     <nav style="width:180px;min-width:180px;padding-right:20px;border-right:1px solid rgba(255,255,255,0.06)" class="hidden sm:block">
       <div style="position:sticky;top:90px">
-        <button onclick="showView('permits')" id="nav-permits" class="nav-tab active" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:600;color:var(--text-bright);background:rgba(43,108,176,0.15);border:1px solid rgba(43,108,176,0.2);margin-bottom:6px;cursor:pointer;transition:all .2s">Inspections</button>
-        <button onclick="showView('newpermits')" id="nav-newpermits" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">New Permits</button>
-        <button onclick="showView('foia')" id="nav-foia" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">FOIA Requests</button>
+        <button onclick="showView('newpermits')" id="nav-newpermits" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:600;color:var(--text-bright);background:rgba(43,108,176,0.15);border:1px solid rgba(43,108,176,0.2);margin-bottom:6px;cursor:pointer;transition:all .2s">New</button>
+        <button onclick="showView('permits')" id="nav-permits" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">Inspections</button>
+        <button onclick="showView('opportunities')" id="nav-opportunities" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">Opportunities</button>
+        <button onclick="showView('foia')" id="nav-foia" class="nav-tab" style="display:block;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:.85rem;font-weight:500;color:var(--text-dim);background:transparent;border:1px solid transparent;margin-bottom:6px;cursor:pointer;transition:all .2s">FOIA</button>
       </div>
     </nav>
 
@@ -390,8 +392,22 @@
 
     <!-- ═══ VIEW: NEW PERMITS ═══ -->
     <div id="view-newpermits" style="display:none">
-      <h2 class="text-xl font-bold mb-4" style="color:var(--text-bright)">New Permits Today</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold" style="color:var(--text-bright)">New Inspections <span style="font-size:.8rem;font-weight:400;color:var(--text-dim)">(last 3 days)</span></h2>
+        <div class="flex gap-2">
+          <button onclick="deleteSelectedNew()" id="btnDeleteNew" class="btn-danger hidden" style="font-size:.75rem;padding:5px 12px">Delete Selected</button>
+          <button onclick="markSelectedNotifSent()" class="btn-glass" style="font-size:.75rem;padding:5px 12px">Mark Sent</button>
+        </div>
+      </div>
       <div id="newPermitsViewList" class="glass-card p-5 mb-6">
+        <p style="color:var(--text-dim);font-size:.85rem">Loading...</p>
+      </div>
+    </div>
+
+    <!-- ═══ VIEW: OPPORTUNITIES (emailed builders) ═══ -->
+    <div id="view-opportunities" style="display:none">
+      <h2 class="text-xl font-bold mb-4" style="color:var(--text-bright)">Opportunities <span style="font-size:.8rem;font-weight:400;color:var(--text-dim)">(emails sent)</span></h2>
+      <div id="opportunitiesList" class="glass-card p-5 mb-6">
         <p style="color:var(--text-dim);font-size:.85rem">Loading...</p>
       </div>
     </div>
@@ -451,24 +467,23 @@ let filters = { search:'', max_drive_time:'', municipality:'', date_from:'', dat
 const ENERGOV_BASE = 'https://egcss.charleston-sc.gov/EnerGov_Prod/selfservice';
 
 // ── Sidebar view switching ────
-let currentView='permits';
+let currentView='newpermits';
 function showView(view){
   currentView=view;
-  ['permits','newpermits','foia'].forEach(v=>{
+  ['permits','newpermits','opportunities','foia'].forEach(v=>{
     const el=document.getElementById(`view-${v}`);
     if(el)el.style.display=v===view?'':'none';
-    // Desktop nav
     const nav=document.getElementById(`nav-${v}`);
     if(nav){nav.style.background=v===view?'rgba(43,108,176,0.15)':'transparent';nav.style.borderColor=v===view?'rgba(43,108,176,0.2)':'transparent';nav.style.color=v===view?'var(--text-bright)':'var(--text-dim)';nav.style.fontWeight=v===view?'600':'500';}
-    // Mobile nav
     const mob=document.getElementById(`mob-${v}`);
-    if(mob){mob.className=v===view?'btn-primary flex-1':'btn-glass flex-1';mob.style.fontSize='.8rem';mob.style.padding='8px';}
+    if(mob){mob.className=v===view?'btn-primary flex-1':'btn-glass flex-1';mob.style.fontSize='.75rem';mob.style.padding='8px';}
   });
   if(view==='newpermits')loadTodaysPermitsView();
+  if(view==='opportunities')loadOpportunities();
   if(view==='foia')document.getElementById('foiaPanel').classList.remove('hidden');
 }
 
-document.addEventListener('DOMContentLoaded', () => { applyValuationFilter(); loadFilterOptions(); loadPermits(); loadStats(); loadFoiaMunicipalities(); loadScheduleStatus(); loadTodaysPermits(); });
+document.addEventListener('DOMContentLoaded', () => { showView('newpermits'); applyValuationFilter(); loadFilterOptions(); loadPermits(); loadStats(); loadFoiaMunicipalities(); loadScheduleStatus(); loadTodaysPermits(); });
 
 async function loadFilterOptions() {
   try {
@@ -684,6 +699,7 @@ Best regards,${sig}`);
 async function toggleEmailSent(id,sent){
   try{
     await fetch(`/api/permits/${id}/email-sent`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sent})});
+    if(sent){await fetch(`/api/permits/${id}/job-status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'waiting'})});}
   }catch(e){}
 }
 async function undoEmailSent(id,btn){
@@ -909,35 +925,55 @@ async function loadTodaysPermits(){
     if(mobBtn&&todaysPermitsCache.length>0)mobBtn.textContent=`New (${todaysPermitsCache.length})`;
   }catch(e){}
 }
+function mapsUrl(addr){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;}
 function loadTodaysPermitsView(){
   const list=document.getElementById('newPermitsViewList');
   if(!list)return;
   const permits=todaysPermitsCache;
   if(!permits||permits.length===0){
-    list.innerHTML='<p style="color:var(--text-dim);font-size:.85rem;padding:20px 0">No new permits scraped today. Run the scraper or wait for the next scheduled run (7 AM / 7 PM).</p>';
+    list.innerHTML='<p style="color:var(--text-dim);font-size:.85rem;padding:20px 0">No new inspections in the last 3 days. Run the scraper or wait for 7 AM / 7 PM auto-scrape.</p>';
+    document.getElementById('btnDeleteNew')?.classList.add('hidden');
     return;
   }
   list.innerHTML=permits.map(p=>{
-    const builderLabel=esc(p.builder_company||p.builder_name||'Unknown');
-    const bestPhone=p.builder_phone||p.personal_phone||'';
-    const bestEmail=p.builder_email||p.personal_email||'';
-    const emailSentChecked=p.email_sent?'checked':'';
-    return `<div class="flex items-center gap-3 py-3" style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:.85rem">
-      <input type="checkbox" class="notif-checkbox" data-id="${p.id}" style="cursor:pointer">
+    const builderLabel=esc(p.builder_company||p.builder_name||'');
+    const contactName=p.builder_name&&p.builder_company?esc(p.builder_name):'';
+    const bestPhone=p.builder_phone||p.personal_phone||p.applicant_phone||'';
+    const bestEmail=p.builder_email||p.personal_email||p.applicant_email||'';
+    const addr=cleanAddress(p.address);
+    return `<div class="flex items-start gap-3 py-3" style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:.85rem">
+      <input type="checkbox" class="notif-checkbox" data-id="${p.id}" onchange="updateNewDeleteBtn()" style="cursor:pointer;margin-top:4px">
       <div class="flex-1 min-w-0">
-        <div class="font-medium" style="color:var(--text-bright)">${esc(p.address)}</div>
-        <div style="font-size:.75rem;color:#FDE047;font-weight:500">${builderLabel}</div>
-        <div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">
+        <a href="${mapsUrl(p.address)}" target="_blank" class="font-medium" style="color:var(--text-bright);text-decoration:none" title="Navigate to address">${esc(addr)}</a>
+        <div style="margin-top:2px">
+          <span style="font-size:.75rem;color:#FDE047;font-weight:500">${builderLabel}</span>
+          ${contactName?`<span style="font-size:.7rem;color:var(--text-dim);margin-left:4px">(${contactName})</span>`:''}
+        </div>
+        <div style="font-size:.7rem;color:var(--text-dim);margin-top:3px">
           ${p.project_value?fmtCurrency(p.project_value)+' &middot; ':''}${esc(p.municipality)||''} &middot; ${fmtDateShort(p.inspection_date)||''}
-          ${bestPhone?' &middot; '+esc(bestPhone):''}${bestEmail?' &middot; '+esc(bestEmail):''}
+        </div>
+        <div style="margin-top:4px">
+          ${bestEmail?`<a href="mailto:${esc(bestEmail)}" style="font-size:.75rem;color:#60A5FA">${esc(bestEmail)}</a>`:''}
+          ${bestPhone?`<div><a href="tel:${esc(bestPhone)}" style="font-size:.75rem;font-family:'Fira Code',monospace;color:var(--text)">${esc(bestPhone)}</a></div>`:''}
         </div>
       </div>
-      <label style="font-size:.65rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" ${emailSentChecked} onchange="toggleEmailSent(${p.id},this)">Sent</label>
-      <a href="${buildMailtoUrl(p)}" class="btn-glass" style="padding:4px 12px;font-size:.7rem;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px" title="Send email">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email
-      </a>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:70px">
+        ${p.email_sent?'<span style="color:#4ADE80;font-size:.75rem;font-weight:600">&#x2713; Sent</span>':(bestEmail?`<a href="${buildMailtoUrl(p)}" onclick="markEmailSentOnClick(${p.id},this)" class="btn-glass" style="padding:4px 12px;font-size:.7rem;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Email</a>`:'')}
+      </div>
     </div>`;
   }).join('');
+}
+function updateNewDeleteBtn(){
+  const checked=document.querySelectorAll('.notif-checkbox:checked').length;
+  const btn=document.getElementById('btnDeleteNew');
+  if(btn){if(checked>0){btn.classList.remove('hidden');btn.textContent=`Delete (${checked})`;}else{btn.classList.add('hidden');}}
+}
+async function deleteSelectedNew(){
+  const boxes=document.querySelectorAll('.notif-checkbox:checked');
+  if(boxes.length===0)return;
+  if(!confirm(`Delete ${boxes.length} permit(s)?`))return;
+  const ids=[...boxes].map(b=>Number(b.dataset.id));
+  try{await fetch('/api/permits/delete-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});loadTodaysPermits();loadTodaysPermitsView();loadPermits();loadStats();}catch(e){}
 }
 async function markSelectedNotifSent(){
   const boxes=document.querySelectorAll('.notif-checkbox:checked');
@@ -949,6 +985,55 @@ async function markSelectedNotifSent(){
   loadTodaysPermits();loadTodaysPermitsView();loadPermits();
 }
 function dismissNotifications(){showView('permits');}
+
+// ── Opportunities (emailed builders with job status) ────
+async function loadOpportunities(){
+  const list=document.getElementById('opportunitiesList');
+  if(!list)return;
+  try{
+    const permits=await(await fetch('/api/permits/emailed')).json();
+    if(!permits||permits.length===0){
+      list.innerHTML='<p style="color:var(--text-dim);font-size:.85rem;padding:20px 0">No emails sent yet. Send your first email from the New tab!</p>';
+      return;
+    }
+    list.innerHTML=permits.map(p=>{
+      const builderLabel=esc(p.builder_company||p.builder_name||'');
+      const contactName=p.builder_name&&p.builder_company?esc(p.builder_name):'';
+      const bestPhone=p.builder_phone||p.personal_phone||'';
+      const bestEmail=p.builder_email||p.personal_email||'';
+      const addr=cleanAddress(p.address);
+      const status=p.job_status||'waiting';
+      const statusColors={waiting:'#93C5FD',won:'#4ADE80',lost:'#FCA5A5',outbid:'#FCA5A5',no_response:'#94A3B8'};
+      const statusColor=statusColors[status]||'#94A3B8';
+      return `<div class="flex items-start gap-3 py-3" style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:.85rem;border-left:3px solid ${statusColor};padding-left:12px">
+        <div class="flex-1 min-w-0">
+          <a href="${mapsUrl(p.address)}" target="_blank" class="font-medium" style="color:var(--text-bright);text-decoration:none">${esc(addr)}</a>
+          <div style="margin-top:2px">
+            <span style="font-size:.75rem;color:#FDE047;font-weight:500">${builderLabel}</span>
+            ${contactName?`<span style="font-size:.7rem;color:var(--text-dim);margin-left:4px">(${contactName})</span>`:''}
+          </div>
+          <div style="margin-top:3px">
+            ${bestEmail?`<a href="mailto:${esc(bestEmail)}" style="font-size:.75rem;color:#60A5FA">${esc(bestEmail)}</a>`:''}
+            ${bestPhone?`<div><a href="tel:${esc(bestPhone)}" style="font-size:.75rem;font-family:'Fira Code',monospace;color:var(--text)">${esc(bestPhone)}</a></div>`:''}
+          </div>
+          <div style="font-size:.7rem;color:var(--text-dim);margin-top:3px">
+            ${p.project_value?fmtCurrency(p.project_value)+' &middot; ':''}${esc(p.municipality)||''} &middot; ${fmtDateShort(p.inspection_date)||''}
+          </div>
+        </div>
+        <select onchange="updateJobStatus(${p.id},this.value)" class="glass-input" style="font-size:.7rem;padding:4px 24px 4px 8px;min-width:130px">
+          <option value="waiting"${status==='waiting'?' selected':''}>Waiting on Response</option>
+          <option value="won"${status==='won'?' selected':''}>Job Won</option>
+          <option value="lost"${status==='lost'?' selected':''}>Job Lost</option>
+          <option value="outbid"${status==='outbid'?' selected':''}>Outbid</option>
+          <option value="no_response"${status==='no_response'?' selected':''}>No Response</option>
+        </select>
+      </div>`;
+    }).join('');
+  }catch(e){list.innerHTML='<p style="color:#FCA5A5">Error loading opportunities</p>';}
+}
+async function updateJobStatus(id,status){
+  try{await fetch(`/api/permits/${id}/job-status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});}catch(e){}
+}
 
 // ── Clear All (triple-click) ────
 let clearClickCount=0,clearTimer=null;

@@ -155,9 +155,15 @@ app.get('/api/permits', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Today's new permits — must be before :id param route
+// Recent new permits (last 3 days) — must be before :id param route
 app.get('/api/permits/today', async (req, res) => {
-  try { res.json(await db.getTodaysNewPermits()); }
+  try { res.json(await db.getRecentNewPermits()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Opportunities — all emailed permits (stored forever)
+app.get('/api/permits/emailed', async (req, res) => {
+  try { res.json(await db.getEmailedPermits()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -192,6 +198,15 @@ app.patch('/api/permits/:id/email-sent', async (req, res) => {
     const sent = req.body?.sent !== undefined ? req.body.sent : true;
     await db.toggleEmailSent(Number(req.params.id), sent);
     res.json({ message: 'Updated', email_sent: sent ? 1 : 0 });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Job status update (won/lost/pending/bidding/etc) ────────────────────────
+app.patch('/api/permits/:id/job-status', async (req, res) => {
+  try {
+    const status = req.body?.status || null;
+    await db.updateJobStatus(Number(req.params.id), status);
+    res.json({ message: 'Updated', job_status: status });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

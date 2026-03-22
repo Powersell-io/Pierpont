@@ -99,6 +99,10 @@ function initSchema() {
   try {
     db.run(`ALTER TABLE permits ADD COLUMN email_sent INTEGER DEFAULT 0`);
   } catch (e) {}
+  // Migration: add job_status column for opportunity tracking (won/lost/pending)
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN job_status TEXT DEFAULT NULL`);
+  } catch (e) {}
   db.run(`CREATE INDEX IF NOT EXISTS idx_opportunity_score ON permits(opportunity_score)`);
 
   db.run(`
@@ -572,11 +576,23 @@ async function toggleEmailSent(id, sent) {
   execute('UPDATE permits SET email_sent = ? WHERE id = ?', [sent ? 1 : 0, id]);
 }
 
-// ─── Get today's new permits (for notification panel) ─────────────────────
-async function getTodaysNewPermits() {
+// ─── Get recent new permits (last 3 days, not dismissed/emailed) ──────────
+async function getRecentNewPermits() {
   await getDb();
-  const today = new Date().toISOString().split('T')[0];
-  return queryAll(`SELECT * FROM permits WHERE date(scraped_at) = ? ORDER BY project_value DESC`, [today]);
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  return queryAll(`SELECT * FROM permits WHERE date(scraped_at) >= ? AND email_sent = 0 ORDER BY inspection_date DESC, project_value DESC`, [threeDaysAgo]);
+}
+
+// ─── Update job status ────────────────────────────────────────────────────
+async function updateJobStatus(id, status) {
+  await getDb();
+  execute('UPDATE permits SET job_status = ? WHERE id = ?', [status, id]);
+}
+
+// ─── Get all emailed permits (opportunities, stored forever) ──────────────
+async function getEmailedPermits() {
+  await getDb();
+  return queryAll('SELECT * FROM permits WHERE email_sent = 1 ORDER BY inspection_date DESC');
 }
 
 async function clearAllData() {
@@ -588,4 +604,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, getTodaysNewPermits, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, updateJobStatus, getRecentNewPermits, getEmailedPermits, clearAllData, close };
