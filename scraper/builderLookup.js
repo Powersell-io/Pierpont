@@ -171,6 +171,24 @@ function extractContactFromHtml(html, $) {
   const sectionEmails = new Set();
 
   if ($) {
+    // FIRST: Extract from JSON-LD structured data (BEFORE removing scripts)
+    $('script[type="application/ld+json"]').each((_, el) => {
+      try {
+        const json = JSON.parse($(el).html());
+        const items = Array.isArray(json) ? json : [json];
+        for (const item of items) {
+          if (item.telephone) {
+            const phones = String(item.telephone).match(PHONE_RE) || [];
+            phones.forEach(p => { if (isValidPhone(p)) telPhones.add(p); });
+          }
+          if (item.email) {
+            const e = String(item.email).toLowerCase();
+            if (isValidEmail(e)) mailtoEmails.add(e);
+          }
+        }
+      } catch {}
+    });
+
     $('a[href^="tel:"]').each((_, el) => {
       const tel = $(el).attr('href').replace(/^tel:\s*/, '').replace(/\s/g, '');
       if (isValidPhone(tel)) telPhones.add(tel);
@@ -215,6 +233,15 @@ function extractContactFromHtml(html, $) {
     const mail = m.replace(/href=["']mailto:\s*/i, '').trim().toLowerCase();
     if (isValidEmail(mail)) mailtoEmails.add(mail);
   });
+
+  // CRITICAL: Also scan the ENTIRE raw HTML for emails — catches JSON-LD,
+  // inline scripts, data attributes, anywhere an email might be hiding
+  if (mailtoEmails.size === 0 && sectionEmails.size === 0) {
+    (html.match(EMAIL_RE) || []).forEach(e => {
+      const lower = e.toLowerCase();
+      if (isValidEmail(lower)) sectionEmails.add(lower);
+    });
+  }
 
   const phones = [...telPhones, ...sectionPhones];
   const emails = [...mailtoEmails, ...sectionEmails];
@@ -1182,10 +1209,16 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false, bu
 
     // ── Step 3: Google Maps / Business Profile ──
     if (!hasFullContact()) {
-      const mapsResult = await searchGoogleMaps(companyName, page);
-      if (mapsResult.phone) addContact([mapsResult.phone], [], 'google-maps');
-      if (mapsResult.email) addContact([], [mapsResult.email], 'google-maps');
-      if (!found.website && mapsResult.website) found.website = mapsResult.website;
+      try {
+        // Google Maps can detach the frame, so use a fresh page
+        const mapsPage = await browser.newPage();
+        await mapsPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        const mapsResult = await searchGoogleMaps(companyName, mapsPage);
+        if (mapsResult.phone) addContact([mapsResult.phone], [], 'google-maps');
+        if (mapsResult.email) addContact([], [mapsResult.email], 'google-maps');
+        if (!found.website && mapsResult.website) found.website = mapsResult.website;
+        try { await mapsPage.close(); } catch {}
+      } catch {}
     }
 
     // ── Step 4: Scrape aggregator profiles (BBB, Houzz, Angi, etc.) ──
@@ -1210,18 +1243,28 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false, bu
 
     // ── Step 6: Facebook business page ──
     if (!hasFullContact()) {
-      const fbResult = await searchFacebookBusiness(companyName, page);
-      if (fbResult.phone) addContact([fbResult.phone], [], 'facebook');
-      if (fbResult.email) addContact([], [fbResult.email], 'facebook');
+      try {
+        const fbPage = await browser.newPage();
+        await fbPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        const fbResult = await searchFacebookBusiness(companyName, fbPage);
+        if (fbResult.phone) addContact([fbResult.phone], [], 'facebook');
+        if (fbResult.email) addContact([], [fbResult.email], 'facebook');
+        try { await fbPage.close(); } catch {}
+      } catch {}
     }
 
     // ── Step 7: SC Secretary of State ──
     if (!hasFullContact()) {
-      const sosResult = await searchSCSecretaryOfState(companyName, page);
-      if (sosResult) {
-        if (sosResult.phone) addContact([sosResult.phone], [], 'sc-sos');
-        if (sosResult.email) addContact([], [sosResult.email], 'sc-sos');
-      }
+      try {
+        const sosPage = await browser.newPage();
+        await sosPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        const sosResult = await searchSCSecretaryOfState(companyName, sosPage);
+        if (sosResult) {
+          if (sosResult.phone) addContact([sosResult.phone], [], 'sc-sos');
+          if (sosResult.email) addContact([], [sosResult.email], 'sc-sos');
+        }
+        try { await sosPage.close(); } catch {}
+      } catch {}
     }
 
     // ── Step 8: Retry with builder's personal name ──
