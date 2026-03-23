@@ -61,6 +61,10 @@ const JUNK_EMAIL_PATTERNS = [
   'test@', 'admin@', 'webmaster@', 'hostmaster@', 'abuse@',
   'facebook.com', 'yelp.com', 'bbb.org', 'houzz.com', 'angi.com',
   'thumbtack.com', 'porch.com', 'homeadvisor.com',
+  // Website builder template junk emails
+  'godaddy.com', 'filler@', 'indiantypefoundry', 'impallari@',
+  'rfuenzalida', 'wixsite.com', 'squarespace.com', 'weebly.com',
+  'templatemonster', 'developer@', 'info@developer',
 ];
 
 // Get Puppeteer launch options from config (respects PUPPETEER_EXECUTABLE_PATH on Railway)
