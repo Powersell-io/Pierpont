@@ -398,11 +398,8 @@ async function getPermitsNeedingLookup() {
         OR (builder_name IS NOT NULL AND builder_name != '')
       )
       AND (
-        (builder_website IS NULL OR builder_website = '')
-        OR (
-          (builder_phone IS NULL OR builder_phone = '')
-          AND (builder_email IS NULL OR builder_email = '')
-        )
+        (builder_phone IS NULL OR builder_phone = '')
+        OR (builder_email IS NULL OR builder_email = '')
       )
     ORDER BY opportunity_score DESC`);
 }
