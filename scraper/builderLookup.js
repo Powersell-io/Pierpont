@@ -1374,10 +1374,10 @@ async function bulkLookupBuilders(db, statusCallback) {
         const companyPermits = companyMap.get(company);
         let result = null;
 
-        // ── Step 1: Check cache — only trust if it has phone or email ──
+        // ── Step 1: Check cache — only trust if it has BOTH phone AND email ──
         const cached = builderCache.get(company);
-        if (cached && (cached.phone || cached.email)) {
-          utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.phone || 'no phone'}, ${cached.email || 'no email'}`);
+        if (cached && cached.phone && cached.email) {
+          utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.phone}, ${cached.email}`);
           result = cached;
         }
 
