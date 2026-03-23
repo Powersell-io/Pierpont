@@ -21,7 +21,7 @@ const SKIP_DOMAINS_FOR_WEBSITE = [
   'linkedin.com', 'youtube.com', 'pinterest.com', 'tiktok.com',
   'reddit.com', 'nextdoor.com',
   // Search engines / tech
-  'google.com', 'bing.com', 'duckduckgo.com', 'apple.com', 'amazon.com',
+  'google.com', 'bing.com', 'duckduckgo.com', 'duck.ai', 'apple.com', 'amazon.com',
   // Review / directory aggregators (skip for "website" but scrape for contact)
   'yelp.com', 'bbb.org', 'yellowpages.com', 'angi.com', 'angieslist.com',
   'homeadvisor.com', 'thumbtack.com', 'houzz.com', 'buildzoom.com',
@@ -758,7 +758,26 @@ async function findCompanyWebsite(queries, page) {
         });
       } catch {}
 
-      // Fallback to DuckDuckGo if Google returned nothing
+      // Fallback 1: Bing search via axios (fast, reliable, no blocking)
+      if (links.length === 0) {
+        try {
+          const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&count=10`;
+          const { data: bingHtml } = await axios.get(bingUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+            timeout: 10000,
+          });
+          const bingLinks = bingHtml.match(/href="(https?:\/\/[^"]+)"/g) || [];
+          for (const m of bingLinks) {
+            const url = m.replace(/^href="/, '').replace(/"$/, '');
+            if (!url.includes('bing.com') && !url.includes('microsoft.com') && !url.includes('go.microsoft')) {
+              links.push(url);
+            }
+          }
+          if (links.length > 0) utils.log(`[Search] Bing found ${links.length} links for "${query}"`);
+        } catch {}
+      }
+
+      // Fallback 2: DuckDuckGo via Puppeteer
       if (links.length === 0) {
         try {
           const ddgUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
@@ -772,7 +791,7 @@ async function findCompanyWebsite(queries, page) {
             });
             if (results.length === 0) {
               document.querySelectorAll('a[href^="http"]').forEach(a => {
-                if (!a.href.includes('duckduckgo.com')) results.push(a.href);
+                if (!a.href.includes('duckduckgo.com') && !a.href.includes('duck.ai')) results.push(a.href);
               });
             }
             return [...new Set(results)];
