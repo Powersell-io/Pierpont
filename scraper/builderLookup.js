@@ -1297,11 +1297,25 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false, bu
       }
     }
 
-    // ── Step 5: Scrape builder's own website ──
-    if (!hasFullContact() && found.website) {
+    // ── Step 5: ALWAYS scrape builder's own website — most authoritative source ──
+    if (found.website) {
       utils.log(`[BuilderLookup] Scraping website for "${companyName}": ${found.website}`);
       const siteResult = await scrapeContactInfo(found.website, page);
-      addContact(siteResult.phones, siteResult.emails, 'website');
+      // Website email/phone OVERRIDES aggregator data (more trustworthy)
+      if (siteResult.emails.length > 0) {
+        const validSiteEmails = siteResult.emails.filter(e => isValidEmail(e));
+        if (validSiteEmails.length > 0) {
+          found.email = validSiteEmails[0]; // override aggregator junk
+          found.sources = found.sources.filter(s => s.field !== 'email');
+          found.sources.push({ field: 'email', source: 'website' });
+          validSiteEmails.forEach(e => found.allEmails.add(e));
+          utils.log(`[BuilderLookup] Website email OVERRIDES aggregator: ${validSiteEmails[0]}`);
+        }
+      }
+      if (siteResult.phones.length > 0) {
+        siteResult.phones.filter(p => isValidPhone(p)).forEach(p => found.allPhones.add(p));
+        if (!found.phone) { found.phone = siteResult.phones[0]; found.sources.push({ field: 'phone', source: 'website' }); }
+      }
     }
 
     // ── Step 6: Facebook business page ──
