@@ -40,6 +40,10 @@ const SKIP_DOMAINS_FOR_WEBSITE = [
   'homesnap.com', 'movoto.com', 'apartments.com',
   // Government / legal
   'sec.gov', 'wikipedia.org',
+  // Additional aggregators/directories
+  'alignable.com', 'bark.com', 'expertise.com', 'contractors.com',
+  'contractorsonline.com', 'superpages.com', 'merchantcircle.com',
+  'local.com', 'citysearch.com', 'brownbook.net', 'hotfrog.com',
 ];
 
 // Keep the old name for backward compat (same list)
@@ -50,6 +54,7 @@ const CONTACT_SCRAPE_DOMAINS = [
   'bbb.org', 'houzz.com', 'angi.com', 'angieslist.com',
   'porch.com', 'buildzoom.com', 'manta.com', 'thumbtack.com',
   'yelp.com', 'yellowpages.com', 'homeadvisor.com', 'chamberofcommerce.com',
+  'alignable.com', 'bark.com', 'expertise.com',
 ];
 
 // Junk email patterns to skip
@@ -112,6 +117,35 @@ function isValidEmail(e) {
   const digitsInLocal = local.replace(/[^\d]/g, '');
   if (digitsInLocal.length >= 7) return false;
   return true;
+}
+
+// ─── Check if email seems related to a builder (reject obvious mismatches) ──
+function isEmailRelevant(email, companyName) {
+  if (!email || !companyName) return true; // can't verify, accept
+  const e = email.toLowerCase();
+  const local = e.split('@')[0];
+  const domain = e.split('@')[1]?.split('.')[0] || '';
+  const company = cleanCompanyName(companyName).toLowerCase();
+  const words = company.split(/\s+/).filter(w => w.length > 2);
+
+  // Generic business emails are always ok (info@, contact@, office@, etc.)
+  if (/^(info|contact|office|hello|sales|admin|support|billing|service|team|general|inquir)/.test(local)) return true;
+
+  // If the email domain contains any word from the company name, it's relevant
+  if (words.some(w => domain.includes(w))) return true;
+
+  // If the local part contains any word from the company name, it's relevant
+  if (words.some(w => local.includes(w))) return true;
+
+  // If it's a gmail/yahoo/outlook, could be personal — accept if builder name matches
+  if (e.includes('gmail.com') || e.includes('yahoo.com') || e.includes('outlook.com') || e.includes('hotmail.com') || e.includes('aol.com')) {
+    return true; // personal emails are hard to validate, accept them
+  }
+
+  // If the domain seems like a real business domain (not a random one), accept
+  if (domain.length > 4) return true;
+
+  return true; // default accept
 }
 
 // ─── Clean company name (strip LLC/Inc/Corp suffixes) ────────────────────────

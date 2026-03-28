@@ -224,12 +224,22 @@ app.patch('/api/permits/:id/contact', async (req, res) => {
 
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-    // Save to permit record
+    // Save to THIS permit
     await db.updateBuilderContact(permit.id, updates);
 
-    // Save to builder cache so ALL future permits from this builder auto-populate
+    // Save to ALL permits from the same builder
     const companyKey = permit.builder_company || permit.builder_name;
+    let updatedCount = 1;
     if (companyKey) {
+      const allPermits = await db.queryPermits({ search: companyKey, per_page: 200 });
+      for (const p of allPermits.data || []) {
+        if (p.id !== permit.id && (p.builder_company === permit.builder_company || p.builder_name === permit.builder_name)) {
+          await db.updateBuilderContact(p.id, updates);
+          updatedCount++;
+        }
+      }
+
+      // Save to builder cache so ALL future permits auto-populate
       const builderCache = require('./scraper/builder-cache');
       const existing = builderCache.get(companyKey) || {};
       builderCache.set(companyKey, {
@@ -239,10 +249,10 @@ app.patch('/api/permits/:id/contact', async (req, res) => {
         allPhones: existing.allPhones || [],
         allEmails: existing.allEmails || [],
       });
-      console.log(`[ManualSave] "${companyKey}" => phone: ${updates.phone || 'unchanged'}, email: ${updates.email || 'unchanged'} — saved to cache`);
+      console.log(`[ManualSave] "${companyKey}" => phone: ${updates.phone || 'unchanged'}, email: ${updates.email || 'unchanged'} — updated ${updatedCount} permits + cache`);
     }
 
-    res.json({ message: 'Contact info saved', updates });
+    res.json({ message: `Contact info saved for ${updatedCount} permit(s)`, updates });
     // Sync updated cache to GitHub
     syncCacheToGitHub().catch(e => console.error('[GitSync] Error:', e.message));
   } catch (err) { res.status(500).json({ error: err.message }); }
