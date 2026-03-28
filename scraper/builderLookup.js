@@ -52,9 +52,10 @@ const SKIP_DOMAINS = SKIP_DOMAINS_FOR_WEBSITE;
 // Aggregator domains worth scraping for direct contact info
 const CONTACT_SCRAPE_DOMAINS = [
   'bbb.org', 'houzz.com', 'angi.com', 'angieslist.com',
-  'porch.com', 'buildzoom.com', 'manta.com', 'thumbtack.com',
+  'porch.com', 'manta.com', 'thumbtack.com',
   'yelp.com', 'yellowpages.com', 'homeadvisor.com', 'chamberofcommerce.com',
   'alignable.com', 'bark.com', 'expertise.com',
+  // NOTE: buildzoom.com REMOVED — mixes emails from multiple builders on one page
 ];
 
 // Junk email patterns to skip
@@ -70,6 +71,9 @@ const JUNK_EMAIL_PATTERNS = [
   'godaddy.com', 'filler@', 'indiantypefoundry', 'impallari@',
   'rfuenzalida', 'wixsite.com', 'squarespace.com', 'weebly.com',
   'templatemonster', 'developer@', 'info@developer',
+  // Aggregator internal emails (NOT builder emails)
+  'buildzoom.com', 'blockrenovation.com', 'name@email',
+  'blandfordintl.com', 'localbuildingpartners.com',
 ];
 
 // Get Puppeteer launch options from config (respects PUPPETEER_EXECUTABLE_PATH on Railway)
@@ -99,12 +103,21 @@ async function launchBrowser() {
   return browser;
 }
 
+// Known junk phone numbers (government offices, call centers, etc.)
+const JUNK_PHONES = [
+  '8037342158', // SC LLR office — NOT a builder phone
+  '8005636881', // Generic 800 number
+  '8552753109', // Generic toll-free
+  '8552753107', // Generic toll-free
+];
+
 function isValidPhone(p) {
   const cleaned = p.replace(/[^\d]/g, '');
   if (cleaned.length !== 10 && !(cleaned.length === 11 && cleaned.startsWith('1'))) return false;
   const d10 = cleaned.slice(-10);
   if (/^(\d)\1{9}$/.test(d10)) return false;
   if (d10.startsWith('000') || d10.startsWith('111') || d10.startsWith('555')) return false;
+  if (JUNK_PHONES.includes(d10)) return false;
   return true;
 }
 
