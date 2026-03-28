@@ -378,11 +378,12 @@ async function updateBuilderContact(id, data) {
   await getDb();
   const fields = [];
   const vals = [];
-  if (data.phone) { fields.push('builder_phone = ?'); vals.push(data.phone); }
-  if (data.email) { fields.push('builder_email = ?'); vals.push(data.email); }
-  if (data.website) { fields.push('builder_website = ?'); vals.push(data.website); }
-  if (data.personal_phone) { fields.push('personal_phone = ?'); vals.push(data.personal_phone); }
-  if (data.personal_email) { fields.push('personal_email = ?'); vals.push(data.personal_email); }
+  // Allow explicit null/empty to CLEAR bad data (use 'phone' in data, not data.phone)
+  if ('phone' in data) { fields.push('builder_phone = ?'); vals.push(data.phone || null); }
+  if ('email' in data) { fields.push('builder_email = ?'); vals.push(data.email || null); }
+  if ('website' in data) { fields.push('builder_website = ?'); vals.push(data.website || null); }
+  if ('personal_phone' in data) { fields.push('personal_phone = ?'); vals.push(data.personal_phone || null); }
+  if ('personal_email' in data) { fields.push('personal_email = ?'); vals.push(data.personal_email || null); }
   if (fields.length === 0) return;
   vals.push(id);
   execute(`UPDATE permits SET ${fields.join(', ')} WHERE id = ?`, vals);
