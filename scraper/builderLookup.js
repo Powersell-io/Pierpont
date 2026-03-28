@@ -856,7 +856,13 @@ async function findCompanyWebsite(queries, page) {
           const isSkipped = SKIP_DOMAINS_FOR_WEBSITE.some(d => hostname === d || hostname.endsWith('.' + d));
           if (isSkipped) continue;
 
-          // First non-skipped link is the builder's own website
+          // Skip government sites, news, PDFs, and other non-business URLs
+          if (hostname.endsWith('.gov') || hostname.endsWith('.edu') || hostname.endsWith('.org')) continue;
+          const urlLower = link.toLowerCase();
+          if (urlLower.endsWith('.pdf') || urlLower.includes('/agenda') || urlLower.includes('/minutes')) continue;
+          if (hostname.includes('news') || hostname.includes('patch.com') || hostname.includes('postandcourier')) continue;
+
+          // First non-skipped link that looks like a real business website
           if (!result.website) {
             result.website = link;
           }
