@@ -72,8 +72,14 @@ const JUNK_EMAIL_PATTERNS = [
   'rfuenzalida', 'wixsite.com', 'squarespace.com', 'weebly.com',
   'templatemonster', 'developer@', 'info@developer',
   // Aggregator internal emails (NOT builder emails)
-  'buildzoom.com', 'blockrenovation.com', 'name@email',
+  'buildzoom.com', 'blockrenovation.com', 'name@email', 'john@email',
   'blandfordintl.com', 'localbuildingpartners.com',
+  // Government/institutional emails
+  'llr.sc.gov', 'charlestoncounty.org', 'usna.edu',
+  // News/media
+  'live5news.com', 'postandcourier.com',
+  // Template placeholders
+  'info@mysite.com', 'your@email', 'email@example', 'highergov.com',
 ];
 
 // Get Puppeteer launch options from config (respects PUPPETEER_EXECUTABLE_PATH on Railway)
