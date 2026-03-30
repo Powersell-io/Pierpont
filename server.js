@@ -341,7 +341,10 @@ Pursuant to the South Carolina Freedom of Information Act, I am a taxpaying citi
 
 A list of all strapping inspections (also known as strap/banding inspections) that received a passing status within the last 90 days, including permit number, property address, contractor/builder name, contractor/builder phone number, contractor/builder email address, underlying build permit valuation, inspection date, and status.
 
-Thank you for your time.`;
+Thank you for your time.
+
+Steven Dolloff
+(843) 200-1518`;
 
 app.get('/api/foia/municipalities', (req, res) => {
   const munis = config.municipalities;
