@@ -922,5 +922,17 @@
     "permits_new": 0,
     "permits_updated": 0,
     "errors": null
+  },
+  {
+    "id": 78,
+    "started_at": "2026-04-04 23:09:06",
+    "completed_at": null,
+    "status": "running",
+    "municipalities_attempted": 0,
+    "municipalities_succeeded": 0,
+    "permits_found": 0,
+    "permits_new": 0,
+    "permits_updated": 0,
+    "errors": null
   }
 ]
