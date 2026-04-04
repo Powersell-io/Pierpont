@@ -190,7 +190,7 @@ app.get('/healthz', async (req, res) => {
 
 // Auth middleware — protect everything except /login and static login assets
 app.use((req, res, next) => {
-  if (req.path === '/login' || req.path === '/logo.png') return next();
+  if (req.path === '/login' || req.path === '/logo.png' || req.path === '/healthz') return next();
   if (!isAuthenticated(req)) return res.redirect('/login');
   next();
 });
