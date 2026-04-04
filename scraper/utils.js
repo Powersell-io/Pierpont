@@ -210,11 +210,9 @@ function createPermitRecord(data) {
   };
 }
 
-// Calculate opportunity score (0-100) from valuation, recency, and distance
-// Weights: 40% valuation, 30% recency, 30% distance
+// Calculate opportunity score (0-100) from valuation and recency
+// Weights: 50% valuation, 50% recency
 function calculateOpportunityScore({ project_value, inspection_date, municipality }) {
-  const driveTimes = config.driveTimesFrom29464;
-
   // Valuation score: log scale ($100K = 0, $2M+ = 100)
   let val_score = 0;
   if (project_value && project_value > 100000) {
@@ -234,21 +232,13 @@ function calculateOpportunityScore({ project_value, inspection_date, municipalit
     recent_score = Math.min(100, Math.max(0, (1 - daysDiff / 30) * 100));
   }
 
-  // Distance score: linear (0 min = 100, 90 min = 0)
-  let dist_score = 50; // default if municipality not in map
-  if (municipality && driveTimes[municipality] !== undefined) {
-    const minutes = driveTimes[municipality];
-    dist_score = Math.min(100, Math.max(0, (1 - minutes / 90) * 100));
-  }
-
-  const score = Math.round(val_score * 0.4 + recent_score * 0.3 + dist_score * 0.3);
+  const score = Math.round(val_score * 0.5 + recent_score * 0.5);
 
   return {
     score: Math.min(100, Math.max(0, score)),
     components: {
       val_score: Math.round(val_score),
       recent_score: Math.round(recent_score),
-      dist_score: Math.round(dist_score),
     },
   };
 }
