@@ -288,20 +288,6 @@ async function queryPermits(params = {}) {
     for (let i = 0; i < 11; i++) values.push(s);
   }
 
-  // Drive-time filter: restrict to municipalities within N minutes of 29464
-  if (params.max_drive_time) {
-    const driveTimes = require('../config').driveTimesFrom29464;
-    const maxMin = Number(params.max_drive_time);
-    const withinRange = Object.entries(driveTimes)
-      .filter(([, min]) => min <= maxMin)
-      .map(([name]) => name);
-    if (withinRange.length > 0) {
-      conditions.push(`municipality IN (${withinRange.map(() => '?').join(',')})`);
-      values.push(...withinRange);
-    } else {
-      conditions.push('1=0'); // no municipalities in range
-    }
-  }
 
   // Exclude production/national builders
   const excluded = config.excludedBuilders || [];
@@ -354,15 +340,7 @@ async function getAllPermitsForExport(params = {}) {
   if (params.date_to) { cond.push('inspection_date <= ?'); vals.push(params.date_to); }
   if (params.inspection_status) { cond.push('inspection_status = ?'); vals.push(params.inspection_status); }
   if (params.search) { cond.push(`(address LIKE ? OR builder_name LIKE ? OR permit_number LIKE ?)`); const s=`%${params.search}%`; vals.push(s,s,s); }
-  if (params.max_drive_time) {
-    const driveTimes = require('../config').driveTimesFrom29464;
-    const maxMin = Number(params.max_drive_time);
-    const withinRange = Object.entries(driveTimes).filter(([, min]) => min <= maxMin).map(([name]) => name);
-    if (withinRange.length > 0) {
-      cond.push(`municipality IN (${withinRange.map(() => '?').join(',')})`);
-      vals.push(...withinRange);
-    } else { cond.push('1=0'); }
-  }
+
   // Exclude production/national builders
   const excluded = config.excludedBuilders || [];
   if (excluded.length > 0) {
