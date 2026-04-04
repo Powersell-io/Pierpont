@@ -718,5 +718,17 @@
     "permits_new": 0,
     "permits_updated": 0,
     "errors": null
+  },
+  {
+    "id": 61,
+    "started_at": "2026-04-04 20:26:27",
+    "completed_at": null,
+    "status": "running",
+    "municipalities_attempted": 0,
+    "municipalities_succeeded": 0,
+    "permits_found": 0,
+    "permits_new": 0,
+    "permits_updated": 0,
+    "errors": null
   }
 ]
