@@ -13,6 +13,7 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 
 const builderCache = require('./scraper/builder-cache');
+const scrapeHistory = require('./scraper/scrape-history');
 const buyerList = require('./scraper/buyer-list');
 const https = require('https');
 const fs = require('fs');
@@ -21,6 +22,7 @@ const fs = require('fs');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
 const GITHUB_REPO = 'PowersellClaude/Pierpont';
 const CACHE_FILE_PATH = 'data/builder-cache.json';
+const HISTORY_FILE_PATH = 'data/scrape-history.json';
 let lastCacheSyncCount = 0;
 
 async function syncCacheToGitHub() {
@@ -63,6 +65,43 @@ async function syncCacheToGitHub() {
     console.error(`[GitSync] Sync error: ${err.message}`);
   }
 }
+async function syncHistoryToGitHub() {
+  if (!GITHUB_TOKEN) { console.log('[GitSync] No GITHUB_TOKEN set — skipping history sync'); return; }
+  try {
+    const runs = await db.exportScrapeHistory();
+    scrapeHistory.saveHistory(runs);
+    const historyData = JSON.stringify(runs, null, 2);
+
+    // Get current file SHA (required for update)
+    const getRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${HISTORY_FILE_PATH}`, {
+      headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
+    });
+    const getJson = await getRes.json();
+    const sha = getJson.sha || null;
+
+    const body = {
+      message: `Auto-update scrape history (${runs.length} runs)`,
+      content: Buffer.from(historyData).toString('base64'),
+      ...(sha ? { sha } : {}),
+    };
+
+    const putRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${HISTORY_FILE_PATH}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github.v3+json' },
+      body: JSON.stringify(body),
+    });
+
+    if (putRes.ok) {
+      console.log(`[GitSync] Scrape history synced to GitHub: ${runs.length} runs`);
+    } else {
+      const err = await putRes.text();
+      console.error(`[GitSync] Failed to sync history: ${putRes.status} ${err}`);
+    }
+  } catch (err) {
+    console.error(`[GitSync] History sync error: ${err.message}`);
+  }
+}
+
 const dailyEmail = require('./scraper/daily-email');
 const foiaParser = require('./scraper/foia-parser');
 const multer = require('multer');
@@ -75,7 +114,6 @@ app.use(cookieParser());
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 const APP_PASSWORD = 'Bulleit';
-const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 const sessions = new Set();
 
 function createSession() {
@@ -138,6 +176,16 @@ app.get('/logout', (req, res) => {
   if (req.cookies?.session) sessions.delete(req.cookies.session);
   res.clearCookie('session');
   res.redirect('/login');
+});
+
+// Health check — must be BEFORE auth middleware so Railway can probe it without a session
+app.get('/healthz', async (req, res) => {
+  try {
+    const stats = await db.getStats();
+    res.json({ ok: true, permits: stats.total_permits, lastScrape: stats.last_run ? stats.last_run.completed_at : null });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // Auth middleware — protect everything except /login and static login assets
@@ -240,7 +288,6 @@ app.patch('/api/permits/:id/contact', async (req, res) => {
       }
 
       // Save to builder cache so ALL future permits auto-populate
-      const builderCache = require('./scraper/builder-cache');
       const existing = builderCache.get(companyKey) || {};
       builderCache.set(companyKey, {
         website: updates.website !== undefined ? updates.website : (existing.website || null),
@@ -274,8 +321,9 @@ async function runBuilderLookupAfterScrape() {
     builderLookupStatus = { status: 'error', error: err.message };
   } finally {
     builderLookupInProgress = false;
-    // Auto-sync cache to GitHub so it persists across deploys
+    // Auto-sync cache and scrape history to GitHub so they persist across deploys
     syncCacheToGitHub().catch(e => console.error('[GitSync] Error:', e.message));
+    syncHistoryToGitHub().catch(e => console.error('[GitSync] History error:', e.message));
   }
 }
 
@@ -285,8 +333,10 @@ app.post('/api/scrape', async (req, res) => {
   res.json({ message: 'Scrape started', status: 'running' });
   try {
     await scraper.runAllScrapers(req.body || {});
-    // Auto-run builder lookup after scrape completes
-    runBuilderLookupAfterScrape();
+    // Persist scrape history to GitHub immediately — before builder lookup so it's safe if lookup crashes
+    syncHistoryToGitHub().catch(e => console.error('[GitSync] History error:', e.message));
+    // Auto-run builder lookup after scrape completes; reset flag only after lookup finishes
+    await runBuilderLookupAfterScrape();
   }
   catch (err) { console.error('Scrape error:', err); }
   finally { scrapeInProgress = false; }
@@ -300,7 +350,8 @@ app.post('/api/scrape/test', async (req, res) => {
   res.json({ message: `Test scrape started (limit: ${limit})`, status: 'running' });
   try {
     await scraper.runAllScrapers({ testLimit: limit });
-    runBuilderLookupAfterScrape();
+    syncHistoryToGitHub().catch(e => console.error('[GitSync] History error:', e.message));
+    await runBuilderLookupAfterScrape();
   }
   catch (err) { console.error('Test scrape error:', err); }
   finally { scrapeInProgress = false; }
@@ -310,18 +361,21 @@ app.get('/api/scrape/status', (req, res) => {
   res.json({ running: scrapeInProgress, ...(scraper.getStatus() || { status: 'idle' }) });
 });
 
+app.get('/api/scrape/history', async (req, res) => {
+  try { res.json(await db.exportScrapeHistory()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/scrapers', (req, res) => { res.json(scraper.getScraperInfo()); });
 
 // ─── Municipalities & Filter Options ─────────────────────────────────────────
 app.get('/api/municipalities', (req, res) => {
   const munis = config.municipalities;
-  const driveTimes = config.driveTimesFrom29464;
   const result = Object.values(munis).map(m => ({
     name: m.name,
     slug: m.slug,
     active: m.active,
     portalType: m.portalType,
-    driveTimeMinutes: m.driveTimeMinutes,
   }));
   res.json(result);
 });
@@ -329,8 +383,7 @@ app.get('/api/municipalities', (req, res) => {
 app.get('/api/filters/options', async (req, res) => {
   try {
     const distinct = await db.getDistinctValues();
-    const driveTimes = config.driveTimesFrom29464;
-    res.json({ ...distinct, driveTimes });
+    res.json(distinct);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -351,7 +404,7 @@ app.get('/api/foia/municipalities', (req, res) => {
   const result = Object.values(munis)
     .filter(m => m.foia)
     .map(m => {
-      const entry = { name: m.name, slug: m.slug, driveTimeMinutes: m.driveTimeMinutes, foiaType: m.foia.type };
+      const entry = { name: m.name, slug: m.slug, foiaType: m.foia.type };
       if (m.foia.type === 'email') {
         const subject = encodeURIComponent('FOIA REQUEST — Strapping Inspections');
         const body = encodeURIComponent(FOIA_BODY);
@@ -555,12 +608,13 @@ app.post('/api/permits/:id/lookup-builder', async (req, res) => {
   }
 });
 
-// ─── Auto-Schedule (7am, 1pm, 6pm EST) ──────────────────────────────────────
+// ─── Auto-Schedule (7am, 7pm EST) ───────────────────────────────────────────
 let scheduleEnabled = true;
 const scheduleTimes = ['7:00', '19:00']; // EST — 7am and 7pm
 const scheduleHistory = []; // last 20 scheduled runs
+let morningEmailSentDate = null; // track which calendar date the morning email was sent
 
-async function runScheduledScrape() {
+async function runScheduledScrape(isMorningScrape = false) {
   const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
   console.log(`\n⏰ Scheduled scrape triggered at ${now} EST (today only)`);
   if (scrapeInProgress) {
@@ -578,7 +632,23 @@ async function runScheduledScrape() {
     scheduleHistory[0].status = 'completed';
     scheduleHistory[0].permits = result.permitsFound;
     scheduleHistory[0].newPermits = result.permitsNew;
-    runBuilderLookupAfterScrape();
+    // Persist history before lookup in case lookup crashes
+    syncHistoryToGitHub().catch(e => console.error('[GitSync] History error:', e.message));
+    await runBuilderLookupAfterScrape();
+    // Send morning email immediately after 7am scrape + lookup complete (Mon-Fri only)
+    if (isMorningScrape) {
+      const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+      const dayOfWeek = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short' });
+      if (!['Sat', 'Sun'].includes(dayOfWeek) && morningEmailSentDate !== todayDate) {
+        try {
+          await dailyEmail.sendDailyEmail();
+          morningEmailSentDate = todayDate;
+          console.log(`[Email] Morning email sent after 7am scrape (${todayDate})`);
+        } catch (err) {
+          console.error('[Email] Failed to send after scrape:', err.message);
+        }
+      }
+    }
   } catch (err) {
     console.error('Scheduled scrape error:', err);
     scheduleHistory[0].status = 'error';
@@ -590,11 +660,20 @@ async function runScheduledScrape() {
 
 // Schedule: 7:00 AM and 7:00 PM EST (America/New_York) — today's permits only
 const cronJobs = [
-  cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
-  cron.schedule('0 19 * * *', () => { if (scheduleEnabled) runScheduledScrape(); }, { timezone: 'America/New_York' }),
-  // Daily leads email — 7:30 AM EST Mon-Fri (after scrape finishes)
+  cron.schedule('0 7 * * *', () => { if (scheduleEnabled) runScheduledScrape(true); }, { timezone: 'America/New_York' }),
+  cron.schedule('0 19 * * *', () => { if (scheduleEnabled) runScheduledScrape(false); }, { timezone: 'America/New_York' }),
+  // Fallback: 7:30 AM EST Mon-Fri — sends email only if the post-scrape send didn't happen yet
   cron.schedule('30 7 * * 1-5', async () => {
-    try { await dailyEmail.sendDailyEmail(); } catch (err) { console.error('[Email] Cron error:', err.message); }
+    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (morningEmailSentDate === todayDate) {
+      console.log('[Email] 7:30 fallback cron: email already sent today, skipping');
+      return;
+    }
+    try {
+      await dailyEmail.sendDailyEmail();
+      morningEmailSentDate = todayDate;
+      console.log('[Email] 7:30 fallback cron: email sent');
+    } catch (err) { console.error('[Email] Cron error:', err.message); }
   }, { timezone: 'America/New_York' }),
 ];
 
@@ -648,6 +727,13 @@ async function start() {
   await db.backfillOpportunityScores();
   await db.backfillBuilderCache();
   await db.restoreContactsFromCache();
+
+  // Restore scrape history from GitHub backup (jog DB memory after volume wipe)
+  const savedHistory = scrapeHistory.loadHistory();
+  if (savedHistory.length > 0) {
+    const imported = await db.importScrapeHistory(savedHistory);
+    if (imported > 0) console.log(`[ScrapeHistory] Imported ${imported} historical run(s) from scrape-history.json`);
+  }
   app.listen(config.server.port, () => {
     console.log('');
     console.log('🏗️  Pierpont Money Printer');
@@ -661,8 +747,7 @@ async function start() {
     if (process.env.EMAIL_FROM) console.log(`   From: ${process.env.EMAIL_FROM} → To: ${process.env.EMAIL_TO || process.env.EMAIL_FROM}`);
     console.log('');
 
-    // Auto-scrape: only today's permits, never full 30-day on startup
-    // Full scrapes should be triggered manually via "Run Scraper" button
+    // Catch-up scrape: if we've been down for more than 13 hours, trigger a scrape after 30s
     setTimeout(async () => {
       try {
         const stats = await db.getStats();
@@ -673,10 +758,25 @@ async function start() {
         } else {
           console.log('📭 Empty database — click "Run Scraper" for initial load, or wait for 7am/7pm auto-scrape');
         }
+
+        const lastRun = await db.getLatestScrapeRun();
+        if (!lastRun || !lastRun.completed_at) {
+          console.log('[CATCH-UP] No completed scrape run found — triggering catch-up scrape...');
+          runScheduledScrape(false);
+        } else {
+          const lastTime = new Date(lastRun.completed_at + 'Z').getTime(); // treat as UTC
+          const hoursAgo = (Date.now() - lastTime) / (1000 * 60 * 60);
+          if (hoursAgo > 13) {
+            console.log(`[CATCH-UP] Last scrape was ${hoursAgo.toFixed(1)}h ago, triggering catch-up scrape...`);
+            runScheduledScrape(false);
+          } else {
+            console.log(`[CATCH-UP] Last scrape was ${hoursAgo.toFixed(1)}h ago — no catch-up needed`);
+          }
+        }
       } catch (err) {
         console.error('Startup check error:', err);
       }
-    }, 5000);
+    }, 30000);
   });
 }
 start();

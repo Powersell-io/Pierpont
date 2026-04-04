@@ -89,33 +89,6 @@ function getDateRange(days = config.scraper.defaultDateRangeDays) {
   };
 }
 
-// Check if an inspection type string matches our framing variants
-function isFramingInspection(inspectionType) {
-  if (!inspectionType) return false;
-  const normalized = inspectionType.toLowerCase().trim();
-  return config.scraper.framingInspectionVariants.some(v =>
-    normalized.includes(v.toLowerCase())
-  );
-}
-
-// Check if an inspection status is an approved variant
-function isApprovedStatus(status) {
-  if (!status) return false;
-  const normalized = status.toLowerCase().trim();
-  return config.scraper.approvedStatusVariants.some(v =>
-    normalized.includes(v.toLowerCase())
-  );
-}
-
-// Check if a permit type is new construction
-function isNewConstruction(permitType) {
-  if (!permitType) return false;
-  const normalized = permitType.toLowerCase().trim();
-  return config.scraper.newConstructionVariants.some(v =>
-    normalized.includes(v.toLowerCase())
-  );
-}
-
 // Determine municipality from address for county-level results
 function detectMunicipalityFromAddress(address) {
   if (!address) return null;
@@ -308,9 +281,6 @@ module.exports = {
   parseDollarValue,
   formatDate,
   getDateRange,
-  isFramingInspection,
-  isApprovedStatus,
-  isNewConstruction,
   detectMunicipalityFromAddress,
   cleanText,
   extractPhone,

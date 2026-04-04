@@ -160,7 +160,6 @@ module.exports = {
 
     let browser;
     const allPermits = new Map();
-    let caughtUp = false;
 
     try {
       browser = await puppeteer.launch(config.scraper.puppeteer);
@@ -173,9 +172,9 @@ module.exports = {
       await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 45000 });
       await new Promise(r => setTimeout(r, 3000));
 
-      // Search for each strapping type
+      // Search for each strapping type — each type has its own independent caughtUp tracking
       for (const strappingType of STRAPPING_TYPES) {
-        if (caughtUp) break;
+        let caughtUp = false;
 
         try {
           utils.log(`[Charleston] Searching: ${strappingType.name} + Passed - Permit`);
@@ -195,7 +194,7 @@ module.exports = {
             }
           }
 
-          utils.log(`[Charleston] ${strappingType.name}: ${permits.length} results, ${newCount} new (${allPermits.size} total)`);
+          utils.log(`[Charleston] ${strappingType.name}: ${permits.length} results, ${newCount} new (${allPermits.size} total)${caughtUp ? ' (caught up)' : ''}`);
         } catch (err) {
           utils.log(`[Charleston] ${strappingType.name} failed: ${err.message}`);
         }
@@ -238,7 +237,7 @@ module.exports = {
       utils.log(`[Charleston] Saved ${seenPermits.size} total seen permits`);
 
       await page.close();
-      utils.log(`[Charleston] Scrape complete — ${allPermits.size} new permits${caughtUp ? ' (caught up with previous run)' : ''}`);
+      utils.log(`[Charleston] Scrape complete — ${allPermits.size} new permits`);
 
     } catch (error) {
       utils.log(`[Charleston] Fatal error: ${error.message}`);
@@ -457,13 +456,13 @@ module.exports = {
 
       allContacts.push({ type: contact.ContactTypeName, name: fullName || null, company, phone: cPhone, email: cEmail });
 
-      if (type.includes('applicant')) {
-        if (!applicant) applicant = fullName || null;
-        if (!applicantCompany && company) applicantCompany = company;
+      if (type.includes('contractor') || type.includes('builder') || type.includes('general')) {
+        contractors.push({ name: fullName || null, company, phone: cPhone, email: cEmail });
         if (!contactPhone && cPhone) contactPhone = cPhone;
         if (!contactEmail && cEmail) contactEmail = cEmail;
-      } else if (type.includes('contractor') || type.includes('builder')) {
-        contractors.push({ name: fullName || null, company, phone: cPhone, email: cEmail });
+      } else if (type.includes('applicant')) {
+        if (!applicant) applicant = fullName || null;
+        if (!applicantCompany && company) applicantCompany = company;
         if (!contactPhone && cPhone) contactPhone = cPhone;
         if (!contactEmail && cEmail) contactEmail = cEmail;
       } else if (type.includes('owner')) {
@@ -471,10 +470,10 @@ module.exports = {
       }
     }
 
-    permitData.builder_name = applicant || (contractors[0]?.name) || null;
-    permitData.builder_company = applicantCompany || (contractors[0]?.company) || null;
-    permitData.builder_phone = contactPhone || (contractors[0]?.phone) || null;
-    permitData.builder_email = contactEmail || (contractors[0]?.email) || null;
+    permitData.builder_name = (contractors[0]?.name) || applicant || null;
+    permitData.builder_company = (contractors[0]?.company) || applicantCompany || null;
+    permitData.builder_phone = (contractors[0]?.phone) || contactPhone || null;
+    permitData.builder_email = (contractors[0]?.email) || contactEmail || null;
     permitData.owner_name = owner || null;
     permitData._allContacts = allContacts;
     permitData._contractors = contractors;
@@ -553,13 +552,13 @@ module.exports = {
 
         allContacts.push({ type: contact.ContactTypeName, name: fullName || null, company, phone: cPhone, email: cEmail });
 
-        if (type.includes('applicant')) {
-          if (!applicant) applicant = fullName || null;
-          if (!applicantCompany && company) applicantCompany = company;
+        if (type.includes('contractor') || type.includes('builder') || type.includes('general')) {
+          contractors.push({ name: fullName || null, company, phone: cPhone, email: cEmail });
           if (!contactPhone2 && cPhone) contactPhone2 = cPhone;
           if (!contactEmail2 && cEmail) contactEmail2 = cEmail;
-        } else if (type.includes('contractor') || type.includes('builder')) {
-          contractors.push({ name: fullName || null, company, phone: cPhone, email: cEmail });
+        } else if (type.includes('applicant')) {
+          if (!applicant) applicant = fullName || null;
+          if (!applicantCompany && company) applicantCompany = company;
           if (!contactPhone2 && cPhone) contactPhone2 = cPhone;
           if (!contactEmail2 && cEmail) contactEmail2 = cEmail;
         } else if (type.includes('owner')) {
@@ -567,10 +566,10 @@ module.exports = {
         }
       }
 
-      detailData.builder_name = applicant || (contractors[0]?.name) || null;
-      detailData.builder_company = applicantCompany || (contractors[0]?.company) || null;
-      detailData.builder_phone = contactPhone2 || (contractors[0]?.phone) || null;
-      detailData.builder_email = contactEmail2 || (contractors[0]?.email) || null;
+      detailData.builder_name = (contractors[0]?.name) || applicant || null;
+      detailData.builder_company = (contractors[0]?.company) || applicantCompany || null;
+      detailData.builder_phone = (contractors[0]?.phone) || contactPhone2 || null;
+      detailData.builder_email = (contractors[0]?.email) || contactEmail2 || null;
       detailData.owner_name = owner || null;
       detailData._allContacts = allContacts;
       detailData._contractors = contractors;

@@ -8,29 +8,9 @@ const directoryScraper = require('./directory-scraper');
 const builderCache = require('./builder-cache');
 const llrLookup = require('./llr-lookup');
 
-// Import all portal scrapers
-const citizenserve = require('./portals/citizenserve');
-const energovGeneric = require('./portals/energov-generic');
-
+// Import portal scraper
 const scrapers = [
-  // Core tier: 0-30 min
   require('./portals/charleston'),
-  require('./portals/mount-pleasant'),
-  require('./portals/sullivans-island'),
-  citizenserve.isleOfPalms,
-  require('./portals/north-charleston'),
-  require('./portals/charleston-county'),
-  // Core tier: 30-60 min
-  citizenserve.kiawah,
-  citizenserve.seabrook,
-  citizenserve.summerville,
-  require('./portals/opengov'),
-  energovGeneric.berkeleyCounty,
-  require('./portals/evolve-public'),
-  // Extended tier: 60-90 min
-  energovGeneric.hiltonHead,
-  energovGeneric.bluffton,
-  citizenserve.hardeeville,
 ];
 
 // Track scraper status for the API

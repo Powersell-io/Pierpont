@@ -58,29 +58,68 @@ const CONTACT_SCRAPE_DOMAINS = [
   // NOTE: buildzoom.com REMOVED — mixes emails from multiple builders on one page
 ];
 
-// Junk email patterns to skip
+// Junk email patterns to skip — substring matches against the full lowercase email
 const JUNK_EMAIL_PATTERNS = [
-  'example.com', 'sentry.io', 'wixpress', 'wix.com', 'squarespace',
-  'wordpress.com', 'w3.org', 'schema.org', 'googleapis.com', 'gstatic.com',
-  'gravatar.com', 'cloudflare', '.png', '.jpg', '.svg', '.gif', '.webp',
-  'noreply', 'no-reply', 'mailer-daemon', 'postmaster@', 'user@domain',
-  'test@', 'admin@', 'webmaster@', 'hostmaster@', 'abuse@',
-  'facebook.com', 'yelp.com', 'bbb.org', 'houzz.com', 'angi.com',
-  'thumbtack.com', 'porch.com', 'homeadvisor.com',
-  // Website builder template junk emails
-  'godaddy.com', 'filler@', 'indiantypefoundry', 'impallari@',
-  'rfuenzalida', 'wixsite.com', 'squarespace.com', 'weebly.com',
-  'templatemonster', 'developer@', 'info@developer',
-  // Aggregator internal emails (NOT builder emails)
-  'buildzoom.com', 'blockrenovation.com', 'name@email', 'john@email',
-  'blandfordintl.com', 'localbuildingpartners.com',
-  // Government/institutional emails
-  'llr.sc.gov', 'charlestoncounty.org', 'usna.edu',
+  // Image/file extensions accidentally captured by EMAIL_RE
+  '.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp', '.css', '.js',
+  // Template / placeholder indicators
+  'example.com', 'user@domain', 'name@email', 'john@email', 'your@email',
+  'email@example', 'info@mysite.com', 'info@mysite', 'info@yoursite',
+  'info@company', 'info@domain', 'info@website', 'filler@', 'test@test',
+  // Website-builder / CMS / SaaS infrastructure
+  'sentry.io', 'wixpress', 'wixsite.com', 'wix.com', 'squarespace.com',
+  'squarespace', 'wordpress.com', 'wordpress.org', 'weebly.com',
+  'w3.org', 'schema.org', 'googleapis.com', 'gstatic.com', 'googleusercontent.com',
+  'gravatar.com', 'cloudflare', 'godaddy.com', 'mailchimp.com', 'hubspot.com',
+  'constantcontact.com', 'campaign-archive.com', 'siteground.com',
+  'bluehost.com', 'hostgator.com', 'namecheap.com', 'shopify.com',
+  'templatemonster', 'indiantypefoundry', 'impallari@', 'rfuenzalida',
+  // Email system bounce/role addresses
+  'noreply', 'no-reply', 'mailer-daemon', 'postmaster@', 'hostmaster@',
+  'abuse@', 'bounces@', 'bounce@', 'unsubscribe@', 'notifications@',
+  'donotreply', 'do-not-reply', 'do_not_reply',
+  // Social media platforms (never a builder's own email)
+  'facebook.com', 'fb.com', 'facebookmail.com',
+  'instagram.com', 'twitter.com', 'x.com', 'tiktok.com',
+  'linkedin.com', 'pinterest.com', 'youtube.com',
+  // Aggregator / directory sites (these are the site's OWN emails, not the builder's)
+  'yelp.com', 'bbb.org', 'houzz.com', 'angi.com', 'angieslist.com',
+  'thumbtack.com', 'porch.com', 'homeadvisor.com', 'buildzoom.com',
+  'yellowpages.com', 'manta.com', 'alignable.com', 'bark.com',
+  'expertise.com', 'mapquest.com', 'nextdoor.com', 'superpages.com',
+  'merchantcircle.com', 'chamberofcommerce.com', 'citysearch.com',
+  'brownbook.net', 'hotfrog.com', 'local.com',
+  'blockrenovation.com', 'blandfordintl.com', 'localbuildingpartners.com',
+  // Government/institutional
+  '.gov', 'llr.sc.gov', 'charlestoncounty.org', 'usna.edu',
+  'highergov.com',
   // News/media
   'live5news.com', 'postandcourier.com',
-  // Template placeholders
-  'info@mysite.com', 'your@email', 'email@example', 'highergov.com',
+  // Internal dev references
+  'developer@', 'info@developer',
+  // Real-estate aggregators
+  'zillow.com', 'realtor.com', 'redfin.com', 'trulia.com',
 ];
+
+// Generic role-address prefixes — emails with these local parts are NOT the builder's real email.
+// Exception: gmail/yahoo/outlook/hotmail/aol personal accounts (handled in isValidEmail separately).
+const GENERIC_EMAIL_PREFIXES = new Set([
+  'info', 'contact', 'admin', 'webmaster', 'noreply', 'no-reply', 'support',
+  'sales', 'hello', 'office', 'marketing', 'help', 'service', 'enquiries',
+  'inquiries', 'inquiry', 'mail', 'team', 'general', 'feedback', 'jobs',
+  'careers', 'billing', 'accounts', 'accounting', 'hr', 'media', 'pr',
+  'press', 'legal', 'privacy', 'security', 'abuse', 'spam', 'postmaster',
+  'hostmaster', 'mailer', 'donotreply', 'do-not-reply', 'reply', 'bounce',
+  'notifications', 'news', 'newsletter', 'updates', 'alert', 'alerts',
+  'webinfo', 'welcome', 'register', 'registration', 'unsubscribe',
+]);
+
+// Domains where a generic prefix is acceptable (owner's personal email may look generic)
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com',
+  'icloud.com', 'me.com', 'live.com', 'msn.com', 'protonmail.com',
+  'proton.me', 'ymail.com',
+]);
 
 // Get Puppeteer launch options from config (respects PUPPETEER_EXECUTABLE_PATH on Railway)
 function getPuppeteerLaunchOpts() {
@@ -109,62 +148,106 @@ async function launchBrowser() {
   return browser;
 }
 
-// Known junk phone numbers (government offices, call centers, etc.)
-const JUNK_PHONES = [
+// Known junk phone numbers (government offices, call centers, directories, etc.)
+const JUNK_PHONES = new Set([
   '8037342158', // SC LLR office — NOT a builder phone
   '8005636881', // Generic 800 number
   '8552753109', // Generic toll-free
   '8552753107', // Generic toll-free
-];
+  '8004444444', // Directory assistance type
+  '8008888888', // Generic 800
+  '8003411234', // AT&T directory
+  '4114114114', // 411 directory pattern
+  '8113478350', // Known junk
+]);
 
 function isValidPhone(p) {
   const cleaned = p.replace(/[^\d]/g, '');
   if (cleaned.length !== 10 && !(cleaned.length === 11 && cleaned.startsWith('1'))) return false;
   const d10 = cleaned.slice(-10);
+  // Reject repeated-digit patterns (1111111111, etc.)
   if (/^(\d)\1{9}$/.test(d10)) return false;
-  if (d10.startsWith('000') || d10.startsWith('111') || d10.startsWith('555')) return false;
-  if (JUNK_PHONES.includes(d10)) return false;
+  // Reject obviously fake/placeholder area codes
+  if (d10.startsWith('000') || d10.startsWith('111')) return false;
+  const areaCode = d10.substring(0, 3);
+  const exchange = d10.substring(3, 6);
+  const subscriber = d10.substring(6);
+  // Reject numbers with obviously invalid area code or exchange
+  if (areaCode === '555' || exchange === '000' || exchange === '111') return false;
+  // 555-0100 through 555-0199 are fictitious numbers reserved for fiction/testing
+  // (exchange is 555 and subscriber starts with 01)
+  if (exchange === '555' && subscriber.startsWith('01')) return false;
+  // Reject known junk numbers
+  if (JUNK_PHONES.has(d10)) return false;
   return true;
 }
 
 function isValidEmail(e) {
-  const lower = e.toLowerCase();
+  if (!e || typeof e !== 'string') return false;
+  const lower = e.toLowerCase().trim();
+
+  // Must match basic email format
+  if (!/^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(lower)) return false;
+
+  // Must have @ and a valid-looking TLD (already enforced by regex above, but be explicit)
+  const atIdx = lower.indexOf('@');
+  if (atIdx < 1) return false;
+
+  const local = lower.substring(0, atIdx);
+  const domain = lower.substring(atIdx + 1);
+
+  // Reject suspiciously short local parts (single char or two chars: a@, ab@)
+  if (local.length < 3) return false;
+
+  // Reject emails that are too long to be real (likely scraped noise)
+  if (lower.length > 60) return false;
+
+  // Reject local parts with 7+ consecutive digits (look like auto-generated IDs)
+  if (/\d{7,}/.test(local)) return false;
+
+  // Reject junk patterns (substring match against full email)
   if (JUNK_EMAIL_PATTERNS.some(p => lower.includes(p))) return false;
-  if (lower.length > 50) return false;
-  if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(lower)) return false;
-  const local = lower.split('@')[0];
-  const digitsInLocal = local.replace(/[^\d]/g, '');
-  if (digitsInLocal.length >= 7) return false;
+
+  // Reject generic role-address prefixes UNLESS it's a personal email domain
+  // (a builder owner might use info@gmail.com, which is odd but valid)
+  const isPersonalDomain = PERSONAL_EMAIL_DOMAINS.has(domain);
+  if (!isPersonalDomain && GENERIC_EMAIL_PREFIXES.has(local)) return false;
+
+  // Reject local parts that look like template placeholders
+  if (/^(your|my|name|email|user|username|test|sample|placeholder|dummy|fake|example|demo)/.test(local)) return false;
+
   return true;
 }
 
 // ─── Check if email seems related to a builder (reject obvious mismatches) ──
+// Note: generic prefixes (info@, contact@, etc.) are already blocked by isValidEmail.
+// This function is a secondary check for non-generic emails found on aggregator pages
+// that may belong to a completely different company.
 function isEmailRelevant(email, companyName) {
   if (!email || !companyName) return true; // can't verify, accept
   const e = email.toLowerCase();
-  const local = e.split('@')[0];
-  const domain = e.split('@')[1]?.split('.')[0] || '';
+  const atIdx = e.indexOf('@');
+  if (atIdx < 0) return false;
+  const local = e.substring(0, atIdx);
+  const domainFull = e.substring(atIdx + 1);
+  const domainSLD = domainFull.split('.')[0]; // second-level domain
   const company = cleanCompanyName(companyName).toLowerCase();
   const words = company.split(/\s+/).filter(w => w.length > 2);
 
-  // Generic business emails are always ok (info@, contact@, office@, etc.)
-  if (/^(info|contact|office|hello|sales|admin|support|billing|service|team|general|inquir)/.test(local)) return true;
+  // Personal email domains — can't verify company match, accept them
+  if (PERSONAL_EMAIL_DOMAINS.has(domainFull)) return true;
 
   // If the email domain contains any word from the company name, it's relevant
-  if (words.some(w => domain.includes(w))) return true;
+  if (words.some(w => domainSLD.includes(w))) return true;
 
   // If the local part contains any word from the company name, it's relevant
   if (words.some(w => local.includes(w))) return true;
 
-  // If it's a gmail/yahoo/outlook, could be personal — accept if builder name matches
-  if (e.includes('gmail.com') || e.includes('yahoo.com') || e.includes('outlook.com') || e.includes('hotmail.com') || e.includes('aol.com')) {
-    return true; // personal emails are hard to validate, accept them
-  }
+  // If the domain seems like a unique business domain (> 5 chars SLD), accept —
+  // we already verified the page belongs to the company via verifyCompanyMatch
+  if (domainSLD.length > 5) return true;
 
-  // If the domain seems like a real business domain (not a random one), accept
-  if (domain.length > 4) return true;
-
-  return true; // default accept
+  return true; // default accept (verifyCompanyMatch is the primary page guard)
 }
 
 // ─── Clean company name (strip LLC/Inc/Corp suffixes) ────────────────────────
@@ -1209,12 +1292,24 @@ async function lookupBuilder(companyName, sharedBrowser, { skipCache = false, bu
   let cachedWebsite = null;
   if (!skipCache) {
     const cached = builderCache.get(companyName) || builderCache.getWithFuzzy(companyName);
-    if (cached && cached.phone && cached.email) {
-      utils.log(`[BuilderLookup] Cache hit for "${companyName}" => ${cached.phone}, ${cached.email}`);
-      return cached;
+    if (cached) {
+      // Re-validate cached contacts against current rules — evict stale junk
+      const cachedPhone = cached.phone && isValidPhone(cached.phone) ? cached.phone : null;
+      const cachedEmail = cached.email && isValidEmail(cached.email) ? cached.email : null;
+      if (cachedPhone && cachedEmail) {
+        if (cachedPhone !== cached.phone || cachedEmail !== cached.email) {
+          // Stale data detected — update cache entry and continue lookup to find real contacts
+          utils.log(`[BuilderLookup] Cache had junk for "${companyName}" — phone:${cached.phone}→${cachedPhone}, email:${cached.email}→${cachedEmail}`);
+        } else {
+          utils.log(`[BuilderLookup] Cache hit for "${companyName}" => ${cachedPhone}, ${cachedEmail}`);
+          return cached;
+        }
+      } else if (cachedPhone !== cached.phone || cachedEmail !== cached.email) {
+        utils.log(`[BuilderLookup] Cache invalidated junk for "${companyName}": phone="${cached.phone}", email="${cached.email}" — will re-lookup`);
+      }
+      // If cache has website but missing/invalid phone/email, use that website as head start
+      if (cached.website) cachedWebsite = cached.website;
     }
-    // If cache has website but missing phone/email, use that website as head start
-    if (cached && cached.website) cachedWebsite = cached.website;
   }
 
   // ── Step 1: Buyer list (instant local lookup) ──
@@ -1470,11 +1565,17 @@ async function bulkLookupBuilders(db, statusCallback) {
         const companyPermits = companyMap.get(company);
         let result = null;
 
-        // ── Step 1: Check cache — only trust if it has BOTH phone AND email ──
+        // ── Step 1: Check cache — only trust if it has BOTH phone AND email, re-validated ──
         const cached = builderCache.get(company);
-        if (cached && cached.phone && cached.email) {
-          utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cached.phone}, ${cached.email}`);
-          result = cached;
+        if (cached) {
+          const cachedPhone = cached.phone && isValidPhone(cached.phone) ? cached.phone : null;
+          const cachedEmail = cached.email && isValidEmail(cached.email) ? cached.email : null;
+          if (cachedPhone && cachedEmail) {
+            utils.log(`[BuilderLookup] Cache hit for "${company}" => ${cachedPhone}, ${cachedEmail}`);
+            result = { ...cached, phone: cachedPhone, email: cachedEmail };
+          } else if (cached.phone || cached.email) {
+            utils.log(`[BuilderLookup] Cache has invalid contact for "${company}" (phone="${cached.phone}", email="${cached.email}") — re-looking up`);
+          }
         }
 
         // ── Step 2: SC LLR contractor license lookup ──

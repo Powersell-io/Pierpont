@@ -335,16 +335,7 @@
         <div class="flex-1 min-w-48">
           <input type="text" id="filterSearch" placeholder="Search address, builder, phone, email, permit #..." class="glass-input w-full" oninput="debouncedUpdate()">
         </div>
-        <select id="filterDistance" class="glass-input" onchange="updateFilters()">
-          <option value="">All distances</option>
-          <option value="15">15 min</option>
-          <option value="30">30 min</option>
-          <option value="45">45 min</option>
-          <option value="60">60 min</option>
-          <option value="75">75 min</option>
-          <option value="90">90 min</option>
-        </select>
-        <select id="filterMunicipality" class="glass-input" onchange="updateFilters()"><option value="">All municipalities</option></select>
+<select id="filterMunicipality" class="glass-input" onchange="updateFilters()"><option value="">All municipalities</option></select>
         <select id="filterStatus" class="glass-input" onchange="updateFilters()"><option value="">All statuses</option></select>
         <button onclick="resetFilters()" class="btn-glass" style="padding:8px 14px;font-size:.8rem">Reset</button>
         <button onclick="exportCSV()" class="btn-glass flex items-center gap-1.5" style="padding:8px 14px;font-size:.8rem"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV</button>
@@ -462,7 +453,7 @@ let currentSort = { column: 'inspection_date', order: 'desc' };
 let currentPage = 1;
 let scrapeCheckInterval = null;
 
-let filters = { search:'', max_drive_time:'', municipality:'', date_from:'', date_to:'', min_value:'', max_value:'', inspection_status:'', no_value:'' };
+let filters = { search:'', municipality:'', date_from:'', date_to:'', min_value:'', max_value:'', inspection_status:'', no_value:'' };
 
 const ENERGOV_BASE = 'https://egcss.charleston-sc.gov/EnerGov_Prod/selfservice';
 
@@ -515,7 +506,6 @@ function applyValuationFilter(){
 }
 function readFiltersFromUI() {
   filters.search=document.getElementById('filterSearch').value.trim();
-  filters.max_drive_time=document.getElementById('filterDistance').value;
   filters.municipality=document.getElementById('filterMunicipality').value;
   filters.date_from=document.getElementById('filterDateFrom').value;
   filters.date_to=document.getElementById('filterDateTo').value;
@@ -533,7 +523,6 @@ function renderChips() {
   const c=document.getElementById('filterChips'); c.innerHTML='';
   const defs=[
     {key:'search',label:()=>`"${filters.search}"`,clear:()=>{document.getElementById('filterSearch').value='';}},
-    {key:'max_drive_time',label:()=>`${filters.max_drive_time} min`,clear:()=>{document.getElementById('filterDistance').value='';}},
     {key:'municipality',label:()=>filters.municipality,clear:()=>{document.getElementById('filterMunicipality').value='';}},
     {key:'date_from',label:()=>`From: ${filters.date_from}`,clear:()=>{document.getElementById('filterDateFrom').value='';}},
     {key:'date_to',label:()=>`To: ${filters.date_to}`,clear:()=>{document.getElementById('filterDateTo').value='';}},
@@ -547,9 +536,9 @@ function renderChips() {
   c.classList.toggle('hidden',!has);
 }
 function clearFilter(k){const c=document.getElementById('filterChips');const ch=c.querySelector(`[data-key="${k}"]`);if(ch&&ch._clear)ch._clear();updateFilters();}
-function resetFilters(){document.getElementById('filterSearch').value='';document.getElementById('filterDistance').value='';document.getElementById('filterMunicipality').value='';document.getElementById('filterDateFrom').value='';document.getElementById('filterDateTo').value='';document.getElementById('filterMinValue').value='';document.getElementById('filterMaxValue').value='';document.getElementById('filterStatus').value='';document.getElementById('filterValuation').value='200000+';filters.no_value='';currentPage=1;currentSort={column:'inspection_date',order:'desc'};applyValuationFilter();loadStats();}
+function resetFilters(){document.getElementById('filterSearch').value='';document.getElementById('filterMunicipality').value='';document.getElementById('filterDateFrom').value='';document.getElementById('filterDateTo').value='';document.getElementById('filterMinValue').value='';document.getElementById('filterMaxValue').value='';document.getElementById('filterStatus').value='';document.getElementById('filterValuation').value='200000+';filters.no_value='';currentPage=1;currentSort={column:'inspection_date',order:'desc'};applyValuationFilter();loadStats();}
 
-function buildQueryParams(){const p=new URLSearchParams();if(filters.search)p.set('search',filters.search);if(filters.max_drive_time)p.set('max_drive_time',filters.max_drive_time);if(filters.municipality)p.set('municipality',filters.municipality);if(filters.date_from)p.set('date_from',filters.date_from);if(filters.date_to)p.set('date_to',filters.date_to);if(filters.min_value)p.set('min_value',filters.min_value);if(filters.max_value)p.set('max_value',filters.max_value);if(filters.inspection_status)p.set('inspection_status',filters.inspection_status);if(filters.no_value)p.set('no_value',filters.no_value);return p;}
+function buildQueryParams(){const p=new URLSearchParams();if(filters.search)p.set('search',filters.search);if(filters.municipality)p.set('municipality',filters.municipality);if(filters.date_from)p.set('date_from',filters.date_from);if(filters.date_to)p.set('date_to',filters.date_to);if(filters.min_value)p.set('min_value',filters.min_value);if(filters.max_value)p.set('max_value',filters.max_value);if(filters.inspection_status)p.set('inspection_status',filters.inspection_status);if(filters.no_value)p.set('no_value',filters.no_value);return p;}
 
 async function loadPermits(){readFiltersFromUI();const p=buildQueryParams();p.set('sort_by',currentSort.column);p.set('sort_order',currentSort.order);p.set('page',currentPage);p.set('per_page',50);try{const r=await(await fetch(`/api/permits?${p}`)).json();renderTable(r.data);renderPagination(r.pagination);}catch(e){console.error(e);}}
 

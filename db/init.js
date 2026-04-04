@@ -104,6 +104,7 @@ function initSchema() {
     db.run(`ALTER TABLE permits ADD COLUMN job_status TEXT DEFAULT NULL`);
   } catch (e) {}
   db.run(`CREATE INDEX IF NOT EXISTS idx_opportunity_score ON permits(opportunity_score)`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_address_type_date ON permits(address, inspection_type, inspection_date) WHERE permit_number LIKE 'AUTO-%'`);
 
   db.run(`
     CREATE TABLE IF NOT EXISTS scrape_runs (
@@ -199,6 +200,17 @@ async function upsertPermit(permit) {
   if (!p.permit_number) {
     // Generate a synthetic key from address + type + date
     p.permit_number = `AUTO-${(p.address || '').substring(0,30)}-${(p.inspection_type || '').substring(0,10)}-${p.inspection_date || Date.now()}`.replace(/\s+/g, '-');
+
+    // Before inserting an AUTO-keyed record, check if a row already exists for the
+    // same (address, inspection_type, inspection_date). If so, reuse its permit_number
+    // so the subsequent logic falls into the UPDATE path instead of inserting a duplicate.
+    if (p.address && p.inspection_type && p.inspection_date) {
+      const existing = queryOne(
+        'SELECT permit_number FROM permits WHERE address = ? AND inspection_type = ? AND inspection_date = ?',
+        [p.address, p.inspection_type, p.inspection_date]
+      );
+      if (existing) p.permit_number = existing.permit_number;
+    }
   }
 
   // Skip if this permit was previously deleted by the user
@@ -506,6 +518,32 @@ async function restoreContactsFromCache() {
 async function createScrapeRun() { await getDb(); execute('INSERT INTO scrape_runs (status) VALUES (?)', ['running']); const r=queryOne('SELECT last_insert_rowid() as id'); return r.id; }
 async function updateScrapeRun(id, data) { await getDb(); const f=[]; const v=[]; for (const [k,val] of Object.entries(data)) { f.push(`${k}=?`); v.push(val===undefined?null:val); } v.push(id); if(f.length) execute(`UPDATE scrape_runs SET ${f.join(',')} WHERE id=?`, v); }
 async function getLatestScrapeRun() { await getDb(); return queryOne('SELECT * FROM scrape_runs ORDER BY id DESC LIMIT 1'); }
+
+// Export all scrape_runs rows for GitHub backup
+async function exportScrapeHistory() {
+  await getDb();
+  return queryAll('SELECT id, started_at, completed_at, status, municipalities_attempted, municipalities_succeeded, permits_found, permits_new, permits_updated, errors FROM scrape_runs ORDER BY id ASC');
+}
+
+// Import scrape_runs from JSON backup — skips any that already exist (matched by started_at)
+async function importScrapeHistory(runs) {
+  if (!runs || runs.length === 0) return 0;
+  await getDb();
+  const existing = queryAll('SELECT started_at FROM scrape_runs');
+  const existingTimestamps = new Set(existing.map(r => r.started_at));
+  let imported = 0;
+  for (const run of runs) {
+    if (!run.started_at || existingTimestamps.has(run.started_at)) continue;
+    db.run(
+      `INSERT INTO scrape_runs (started_at, completed_at, status, municipalities_attempted, municipalities_succeeded, permits_found, permits_new, permits_updated, errors) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [run.started_at, run.completed_at || null, run.status || 'completed', run.municipalities_attempted || 0, run.municipalities_succeeded || 0, run.permits_found || 0, run.permits_new || 0, run.permits_updated || 0, run.errors || null]
+    );
+    imported++;
+  }
+  if (imported > 0) saveToFile();
+  return imported;
+}
+
 function close() { if(db){saveToFile();db.close();db=null;dbReady=null;} }
 
 // ─── Daily email leads ───────────────────────────────────────────────────────
@@ -602,4 +640,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, deletePermit, deletePermits, toggleEmailSent, updateJobStatus, getRecentNewPermits, getEmailedPermits, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, exportScrapeHistory, importScrapeHistory, deletePermit, deletePermits, toggleEmailSent, updateJobStatus, getRecentNewPermits, getEmailedPermits, clearAllData, close };
