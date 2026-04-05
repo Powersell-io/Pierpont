@@ -1579,23 +1579,83 @@ async function bulkLookupBuilders(db, statusCallback) {
         }
 
         // ── Step 2: SC LLR contractor license lookup ──
+        // Step 2a: Check local bulk-scraped LLR data first (fast, no network)
+        let llrResult = null;
+        if (!result) {
+          try {
+            const llrDataPath = require('path').join(__dirname, '..', 'data', 'llr-contractors.json');
+            if (require('fs').existsSync(llrDataPath)) {
+              const llrContractors = JSON.parse(require('fs').readFileSync(llrDataPath, 'utf8'));
+              const normalize = (s) => (s || '').toLowerCase()
+                .replace(/,?\s*(llc|inc\.?|corp\.?|co\.?|l\.?l\.?c\.?|incorporated|corporation|company|group|services|dba\s+.*)$/i, '')
+                .replace(/[^a-z0-9]/g, '');
+              const searchKey = normalize(company);
+              if (searchKey.length >= 3) {
+                const match = llrContractors.find(c => normalize(c.name || c.businessName || c.licenseName || '') === searchKey);
+                if (match) {
+                  llrResult = {
+                    phone: match.phone || null,
+                    email: match.email || null,
+                    allPhones: match.allPhones || (match.phone ? [match.phone] : []),
+                    allEmails: match.allEmails || (match.email ? [match.email] : []),
+                    licenseName: match.licenseName || match.name || match.businessName || null,
+                    licenseNumber: match.licenseNumber || match.license_number || null,
+                    source: 'sc-llr-local',
+                  };
+                  if (llrResult.phone || llrResult.email) {
+                    result = llrResult;
+                    utils.log(`[BuilderLookup] LLR local hit for "${company}" => ${llrResult.phone || 'no phone'}, ${llrResult.email || 'no email'}`);
+                    builderCache.set(company, {
+                      website: null,
+                      phone: llrResult.phone,
+                      email: llrResult.email,
+                      allPhones: llrResult.allPhones,
+                      allEmails: llrResult.allEmails,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            utils.log(`[BuilderLookup] LLR local lookup error for "${company}": ${err.message}`);
+          }
+        }
+
+        // Step 2b: Fall through to live LLR site if no local match
         if (!result && llrAvailable) {
           try {
-            const llrResult = await llrLookup.lookupContractor(company, llrPage);
-            if (llrResult && (llrResult.phone || llrResult.email)) {
-              result = llrResult;
-              utils.log(`[BuilderLookup] LLR hit for "${company}" => ${llrResult.phone || 'no phone'}, ${llrResult.email || 'no email'}`);
+            const liveLlrResult = await llrLookup.lookupContractor(company, llrPage);
+            if (liveLlrResult && (liveLlrResult.phone || liveLlrResult.email)) {
+              llrResult = liveLlrResult;
+              result = liveLlrResult;
+              utils.log(`[BuilderLookup] LLR hit for "${company}" => ${liveLlrResult.phone || 'no phone'}, ${liveLlrResult.email || 'no email'}`);
               builderCache.set(company, {
                 website: null,
-                phone: llrResult.phone,
-                email: llrResult.email,
-                allPhones: llrResult.allPhones || [],
-                allEmails: llrResult.allEmails || [],
+                phone: liveLlrResult.phone,
+                email: liveLlrResult.email,
+                allPhones: liveLlrResult.allPhones || [],
+                allEmails: liveLlrResult.allEmails || [],
               });
             }
             await utils.delay(1500);
           } catch (err) {
             utils.log(`[BuilderLookup] LLR error for "${company}": ${err.message}`);
+          }
+        }
+
+        // Step 2c: Persist LLR license data to all permits for this company
+        if (llrResult && (llrResult.licenseNumber || llrResult.licenseName)) {
+          for (const permit of companyPermits) {
+            try {
+              await db.updateLlrData(permit.id, {
+                licenseNumber: llrResult.licenseNumber || null,
+                licenseName: llrResult.licenseName || null,
+                phone: llrResult.phone || null,
+                email: llrResult.email || null,
+              });
+            } catch (err) {
+              utils.log(`[BuilderLookup] LLR DB update error for permit ${permit.id}: ${err.message}`);
+            }
           }
         }
 

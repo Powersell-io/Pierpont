@@ -103,6 +103,19 @@ function initSchema() {
   try {
     db.run(`ALTER TABLE permits ADD COLUMN job_status TEXT DEFAULT NULL`);
   } catch (e) {}
+  // Migration: add LLR license columns
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN llr_license_number TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN llr_license_name TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN llr_phone TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE permits ADD COLUMN llr_email TEXT`);
+  } catch (e) {}
   db.run(`CREATE INDEX IF NOT EXISTS idx_opportunity_score ON permits(opportunity_score)`);
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_address_type_date ON permits(address, inspection_type, inspection_date) WHERE permit_number LIKE 'AUTO-%'`);
 
@@ -195,6 +208,10 @@ async function upsertPermit(permit) {
     source_url: clean(permit.source_url),
     raw_data: permit.raw_data ? (typeof permit.raw_data === 'string' ? permit.raw_data : JSON.stringify(permit.raw_data)) : null,
     builder_website: clean(permit.builder_website),
+    llr_license_number: clean(permit.llr_license_number),
+    llr_license_name: clean(permit.llr_license_name),
+    llr_phone: clean(permit.llr_phone),
+    llr_email: clean(permit.llr_email),
   };
 
   if (!p.permit_number) {
@@ -255,12 +272,12 @@ async function upsertPermit(permit) {
     // CRITICAL: Never overwrite existing contact info with nulls from a re-scrape.
     // The scrapers don't return phone/email — those come from the builder lookup.
     // Use COALESCE to keep the existing value if the new value is null.
-    execute(`UPDATE permits SET address=?,municipality=?,builder_name=COALESCE(?,builder_name),builder_company=COALESCE(?,builder_company),builder_phone=COALESCE(?,builder_phone),builder_email=COALESCE(?,builder_email),builder_website=COALESCE(?,builder_website),applicant_name=COALESCE(?,applicant_name),applicant_phone=COALESCE(?,applicant_phone),applicant_email=COALESCE(?,applicant_email),owner_name=COALESCE(?,owner_name),project_value=COALESCE(?,project_value),permit_type=COALESCE(?,permit_type),inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=COALESCE(?,permit_issue_date),source_url=COALESCE(?,source_url),scraped_at=datetime('now'),raw_data=?,opportunity_score=? WHERE permit_number=?`,
-      [p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.permit_number]);
+    execute(`UPDATE permits SET address=?,municipality=?,builder_name=COALESCE(?,builder_name),builder_company=COALESCE(?,builder_company),builder_phone=COALESCE(?,builder_phone),builder_email=COALESCE(?,builder_email),builder_website=COALESCE(?,builder_website),applicant_name=COALESCE(?,applicant_name),applicant_phone=COALESCE(?,applicant_phone),applicant_email=COALESCE(?,applicant_email),owner_name=COALESCE(?,owner_name),project_value=COALESCE(?,project_value),permit_type=COALESCE(?,permit_type),inspection_type=?,inspection_date=?,inspection_status=?,permit_issue_date=COALESCE(?,permit_issue_date),source_url=COALESCE(?,source_url),scraped_at=datetime('now'),raw_data=?,opportunity_score=?,llr_license_number=COALESCE(?,llr_license_number),llr_license_name=COALESCE(?,llr_license_name),llr_phone=COALESCE(?,llr_phone),llr_email=COALESCE(?,llr_email) WHERE permit_number=?`,
+      [p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.llr_license_number, p.llr_license_name, p.llr_phone, p.llr_email, p.permit_number]);
     return { action: 'updated', id: existing.id };
   } else {
-    execute(`INSERT INTO permits (permit_number,address,municipality,builder_name,builder_company,builder_phone,builder_email,builder_website,applicant_name,applicant_phone,applicant_email,owner_name,project_value,permit_type,inspection_type,inspection_date,inspection_status,permit_issue_date,source_url,raw_data,opportunity_score) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [p.permit_number, p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score]);
+    execute(`INSERT INTO permits (permit_number,address,municipality,builder_name,builder_company,builder_phone,builder_email,builder_website,applicant_name,applicant_phone,applicant_email,owner_name,project_value,permit_type,inspection_type,inspection_date,inspection_status,permit_issue_date,source_url,raw_data,opportunity_score,llr_license_number,llr_license_name,llr_phone,llr_email) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [p.permit_number, p.address, p.municipality, p.builder_name, p.builder_company, p.builder_phone, p.builder_email, p.builder_website, p.applicant_name, p.applicant_phone, p.applicant_email, p.owner_name, p.project_value, p.permit_type, p.inspection_type, p.inspection_date, p.inspection_status, p.permit_issue_date, p.source_url, p.raw_data, p.opportunity_score, p.llr_license_number, p.llr_license_name, p.llr_phone, p.llr_email]);
     const row = queryOne('SELECT last_insert_rowid() as id');
     return { action: 'inserted', id: row ? row.id : null };
   }
@@ -364,6 +381,14 @@ async function getDistinctValues() {
 }
 
 // ─── Builder contact lookup ─────────────────────────────────────────────────
+async function updateLlrData(id, data) {
+  await getDb();
+  execute(
+    `UPDATE permits SET llr_license_number=COALESCE(?,llr_license_number), llr_license_name=COALESCE(?,llr_license_name), llr_phone=COALESCE(?,llr_phone), llr_email=COALESCE(?,llr_email) WHERE id=?`,
+    [data.licenseNumber || null, data.licenseName || null, data.phone || null, data.email || null, id]
+  );
+}
+
 async function updateBuilderContact(id, data) {
   await getDb();
   const fields = [];
@@ -618,4 +643,4 @@ async function clearAllData() {
   try { if (fs.existsSync(seenFile)) fs.unlinkSync(seenFile); } catch (e) {}
 }
 
-module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, exportScrapeHistory, importScrapeHistory, deletePermit, deletePermits, toggleEmailSent, updateJobStatus, getRecentNewPermits, getEmailedPermits, clearAllData, close };
+module.exports = { getDb, upsertPermit, queryPermits, getPermitById, getPermitByNumber, getStats, getAllPermitsForExport, getDistinctValues, updateBuilderContact, updateLlrData, getPermitsNeedingLookup, updateDrywallOpportunity, getOpportunities, backfillOpportunityScores, backfillBuilderCache, restoreContactsFromCache, getNewHighValueLeads, getAllHighValueLeads, markPermitsEmailed, createScrapeRun, updateScrapeRun, getLatestScrapeRun, exportScrapeHistory, importScrapeHistory, deletePermit, deletePermits, toggleEmailSent, updateJobStatus, getRecentNewPermits, getEmailedPermits, clearAllData, close };

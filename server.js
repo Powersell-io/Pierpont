@@ -8,6 +8,7 @@ const scraper = require('./scraper/index');
 const drywallScanner = require('./scraper/drywall-scanner');
 const builderLookup = require('./scraper/builderLookup');
 const directoryScraper = require('./scraper/directory-scraper');
+const llrScraper = require('./scraper/llr-scraper');
 
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
@@ -543,6 +544,35 @@ app.post('/api/builder-lookup/run', async (req, res) => {
 
 app.get('/api/builder-lookup/status', (req, res) => {
   res.json({ running: builderLookupInProgress, ...(builderLookupStatus || { status: 'idle' }) });
+});
+
+// ─── LLR Targeted Scraper API ─────────────────────────────────────────────────
+app.post('/api/llr/scrape', (req, res) => {
+  const state = llrScraper.getStatus();
+  if (state.status === 'running') {
+    return res.status(409).json({ error: 'LLR scrape already in progress', status: state });
+  }
+  res.json({ message: 'LLR targeted scrape started' });
+  llrScraper.runScrape(db).catch(err => console.error('[LLRScraper] Unhandled error:', err.message));
+});
+
+app.get('/api/llr/status', (req, res) => {
+  const state = llrScraper.getStatus();
+  res.json({
+    running: state.status === 'running',
+    buildersChecked: state.checked,
+    buildersFound: state.found,
+    ...state,
+  });
+});
+
+app.get('/api/llr/contractors', (req, res) => {
+  try {
+    const data = llrScraper.loadLlrData();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/builder-cache/stats', (req, res) => {
