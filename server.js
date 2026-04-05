@@ -546,16 +546,19 @@ app.get('/api/builder-lookup/status', (req, res) => {
   res.json({ running: builderLookupInProgress, ...(builderLookupStatus || { status: 'idle' }) });
 });
 
-// ─── LLR Targeted Scraper API ─────────────────────────────────────────────────
+// ─── LLR Scraper API ─────────────────────────────────────────────────────────
+
+// POST /api/llr/scrape — targeted mode: looks up builders we have in permits/cache
 app.post('/api/llr/scrape', (req, res) => {
   const state = llrScraper.getStatus();
   if (state.status === 'running') {
-    return res.status(409).json({ error: 'LLR scrape already in progress', status: state });
+    return res.status(409).json({ error: 'LLR targeted scrape already in progress', status: state });
   }
   res.json({ message: 'LLR targeted scrape started' });
   llrScraper.runScrape(db).catch(err => console.error('[LLRScraper] Unhandled error:', err.message));
 });
 
+// GET /api/llr/status — targeted scrape status
 app.get('/api/llr/status', (req, res) => {
   const state = llrScraper.getStatus();
   res.json({
@@ -566,10 +569,41 @@ app.get('/api/llr/status', (req, res) => {
   });
 });
 
+// POST /api/llr/scrape/comprehensive — comprehensive A-Z scrape of ALL SC contractors
+let llrComprehensiveInProgress = false;
+app.post('/api/llr/scrape/comprehensive', (req, res) => {
+  const state = llrScraper.getComprehensiveStatus();
+  if (state.running) {
+    return res.status(409).json({ error: 'Comprehensive LLR scrape already in progress', status: state });
+  }
+  const force = req.body?.force === true;
+  const skipDetails = req.body?.skipDetails === true;
+  res.json({ message: 'Comprehensive LLR scrape started (A-Z search for all SC contractors)' });
+  llrComprehensiveInProgress = true;
+  llrScraper.scrapeAll({ force, skipDetails })
+    .catch(err => console.error('[LLR] Comprehensive scrape error:', err.message))
+    .finally(() => { llrComprehensiveInProgress = false; });
+});
+
+// GET /api/llr/scrape/comprehensive/status — comprehensive scrape progress
+app.get('/api/llr/scrape/comprehensive/status', (req, res) => {
+  res.json({ running: llrComprehensiveInProgress, ...llrScraper.getComprehensiveStatus() });
+});
+
+// GET /api/llr/contractors — returns all scraped contractor data
 app.get('/api/llr/contractors', (req, res) => {
   try {
     const data = llrScraper.loadLlrData();
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/llr/stats — summary statistics
+app.get('/api/llr/stats', (req, res) => {
+  try {
+    res.json(llrScraper.getContractorStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
