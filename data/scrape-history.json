@@ -1450,5 +1450,17 @@
     "permits_new": 0,
     "permits_updated": 0,
     "errors": null
+  },
+  {
+    "id": 122,
+    "started_at": "2026-04-05 04:56:42",
+    "completed_at": null,
+    "status": "running",
+    "municipalities_attempted": 0,
+    "municipalities_succeeded": 0,
+    "permits_found": 0,
+    "permits_new": 0,
+    "permits_updated": 0,
+    "errors": null
   }
 ]
